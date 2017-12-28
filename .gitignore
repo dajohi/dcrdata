@@ -12,6 +12,7 @@ vendor/
 *.orig
 *.db
 *.db-journal
+dcrdata.sqlt.db*
 rebuilddb.conf
 cmd/rebuilddb/rebuilddb
 cmd/scanblocks/scanblocks
