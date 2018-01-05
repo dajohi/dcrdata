@@ -236,6 +236,12 @@ func (pgb *ChainDB) BlockTransactions(blockHash string) ([]string, []uint32, []i
 	return blockTransactions, blockInds, trees, err
 }
 
+// BlockMissedVotes retrieves the ticket IDs for all missed votes in the
+// specified block, and an error value.
+func (pgb *ChainDB) BlockMissedVotes(blockHash string) ([]string, error) {
+	return RetrieveMissedVotesInBlock(pgb.db, blockHash)
+}
+
 // VoutValue retrieves the value of the specified transaction outpoint in atoms.
 func (pgb *ChainDB) VoutValue(txID string, vout uint32) (uint64, error) {
 	// txDbID, _, _, err := RetrieveTxByHash(pgb.db, txID)

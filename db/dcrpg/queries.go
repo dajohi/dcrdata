@@ -47,6 +47,29 @@ func RetrieveVoutIDByOutpoint(db *sql.DB, txHash string, voutIndex uint32) (id u
 	return
 }
 
+func RetrieveMissedVotesInBlock(db *sql.DB, blockHash string) (ticketHashes []string, err error) {
+	rows, err := db.Query(internal.SelectMissesInBlock, blockHash)
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		if e := rows.Close(); e != nil {
+			log.Errorf("Close of Query failed: %v", e)
+		}
+	}()
+
+	for rows.Next() {
+		var hash string
+		err = rows.Scan(&hash)
+		if err != nil {
+			break
+		}
+
+		ticketHashes = append(ticketHashes, hash)
+	}
+	return
+}
+
 func RetrieveAllVotesDbIDsHeightsTicketDbIDs(db *sql.DB) (ids []uint64, heights []int64,
 	ticketDbIDs []uint64, err error) {
 	rows, err := db.Query(internal.SelectAllVoteDbIDsHeightsTicketDbIDs)
