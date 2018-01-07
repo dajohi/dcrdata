@@ -1041,8 +1041,6 @@ func (pgb *ChainDB) CollectTicketSpendDBInfo(dbTxns []*dbtypes.Tx, txDbIDs []uin
 	// This only makes sense for stake transactions
 	msgTxns := msgBlock.STransactions
 
-	//var Txns []*dbtypes.Tx
-	//var MsgTxs []*wire.MsgTx
 	for i, tx := range dbTxns {
 		// ensure the transaction slices correspond
 		msgTx := msgTxns[i]
@@ -1052,23 +1050,30 @@ func (pgb *ChainDB) CollectTicketSpendDBInfo(dbTxns []*dbtypes.Tx, txDbIDs []uin
 		}
 
 		// Filter for votes and revokes only
+		var stakeSubmissionVinInd int
+		var spendType TicketSpendType
 		switch tx.TxType {
 		case int16(stake.TxTypeSSGen):
-			spendTypes = append(spendTypes, TicketVoted)
+			spendType = TicketVoted
+			stakeSubmissionVinInd = 1
 		case int16(stake.TxTypeSSRtx):
-			spendTypes = append(spendTypes, TicketRevoked)
+			spendType = TicketRevoked
 		default:
 			continue
 		}
 
-		// Txns = append(Txns, tx)
-		// MsgTxs = append(MsgTxs, msgTx)
+		if stakeSubmissionVinInd >= len(msgTx.TxIn) {
+			log.Warnf("Invalid vote or ticket with %d inputs", len(msgTx.TxIn))
+			continue
+		}
+
+		spendTypes = append(spendTypes, spendType)
 
 		// vote/revoke row ID in *transactions* table
 		spendingTxDbIDs = append(spendingTxDbIDs, txDbIDs[i])
 
 		// ticket hash
-		ticketHash := msgTx.TxIn[1].PreviousOutPoint.Hash.String()
+		ticketHash := msgTx.TxIn[stakeSubmissionVinInd].PreviousOutPoint.Hash.String()
 		ticketHashes = append(ticketHashes, ticketHash)
 
 		// ticket's row ID in *tickets* table
