@@ -471,11 +471,6 @@ func (db *StakeDatabase) Open(dbName string) error {
 
 // Close closes the database.
 func (db *StakeDatabase) Close() error {
-	return db.StakeDB.Close()
-}
-
-// Close closes the database.
-func (db *StakeDatabase) Close() error {
 	err1 := db.PoolDB.Close()
 	err2 := db.StakeDB.Close()
 	if err1 == nil {
@@ -487,6 +482,31 @@ func (db *StakeDatabase) Close() error {
 	return fmt.Errorf("%v + %v", err1, err2)
 }
 
+
+// Close closes the database.
+func (db *StakeDatabase) expires() ([]*chainhash.Hash, []bool) {
+	// revoked includes expired ticket and missed votes that were revoked
+	revoked := db.BestNode.RevokedTickets()
+	// unrevoked includes expired and missed that have not been revoked
+	unrevoked := db.BestNode.MissedTickets()
+
+	var expires []*chainhash.Hash
+	var spent []bool
+	for _, tkt := range revoked {
+		if db.BestNode.ExistsExpiredTicket(*tkt) {
+			expires = append(expires, tkt)
+			spent = append(spent, true)
+		}
+	}
+	for _, tkt := range unrevoked {
+		if db.BestNode.ExistsExpiredTicket(tkt) {
+			expires = append(expires, &tkt)
+			spent = append(spent, false)
+		}
+	}
+	return expires, spent
+}
+
 // PoolInfoBest computes ticket pool value using the database and, if needed, the
 // node RPC client to fetch ticket values that are not cached. Returned are a
 // structure including ticket pool value, size, and average value.
@@ -496,7 +516,13 @@ func (db *StakeDatabase) PoolInfoBest() *apitypes.TicketPoolInfo {
 	liveTickets := db.BestNode.LiveTickets()
 	winningTickets := db.BestNode.Winners()
 	height := db.BestNode.Height()
+	expiredTickets, expireRevoked := db.expires()
 	db.nodeMtx.RUnlock()
+
+	expires := make([]string, len(expiredTickets))
+	for i := range expiredTickets {
+		expires[i] = expiredTickets[i].String()
+	}
 
 	db.liveTicketMtx.Lock()
 	var poolValue int64
@@ -535,11 +561,13 @@ func (db *StakeDatabase) PoolInfoBest() *apitypes.TicketPoolInfo {
 	}
 
 	return &apitypes.TicketPoolInfo{
-		Height:  height,
-		Size:    uint32(poolSize),
-		Value:   poolCoin,
-		ValAvg:  valAvg,
-		Winners: winners,
+		Height:         height,
+		Size:           uint32(poolSize),
+		Value:          poolCoin,
+		ValAvg:         valAvg,
+		Winners:        winners,
+		Expires:        expires,
+		ExpiresRevoked: expireRevoked,
 	}
 }
 

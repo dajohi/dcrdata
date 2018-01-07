@@ -16,6 +16,7 @@ import (
 	"github.com/dcrdata/dcrdata/db/dbtypes"
 	"github.com/dcrdata/dcrdata/explorer"
 	"github.com/dcrdata/dcrdata/stakedb"
+	"github.com/decred/dcrd/blockchain/stake"
 	"github.com/decred/dcrd/chaincfg"
 	"github.com/decred/dcrd/chaincfg/chainhash"
 	"github.com/decred/dcrd/dcrutil"
@@ -62,7 +63,11 @@ type TicketTxnIDGetter struct {
 	db      *sql.DB
 }
 
-func (t *TicketTxnIDGetter) TxnDbID(txid string) (uint64, error) {
+// TxnDbID fetches DB row ID for the ticket specified by the input transaction
+// hash. A cache is checked first. In the event of a cache hit, the DB ID is
+// returned and deleted from the internal cache. In the event of a cache miss,
+// the database is queried. If the database query fails, the error is non-nil.
+func (t *TicketTxnIDGetter) TxnDbID(txid string, expire bool) (uint64, error) {
 	if t == nil {
 		panic("You're using an uninitialized TicketTxnIDGetter")
 	}
@@ -70,14 +75,17 @@ func (t *TicketTxnIDGetter) TxnDbID(txid string) (uint64, error) {
 	dbID, ok := t.idCache[txid]
 	t.RUnlock()
 	if ok {
-		t.Lock()
-		delete(t.idCache, txid)
-		t.Unlock()
+		if expire {
+			t.Lock()
+			delete(t.idCache, txid)
+			t.Unlock()
+		}
 		return dbID, nil
 	}
 	return RetrieveTicketIDByHash(t.db, txid)
 }
 
+// Set stores the (transaction hash, DB row ID) pair a map for future access.
 func (t *TicketTxnIDGetter) Set(txid string, txDbID uint64) {
 	if t == nil {
 		return
@@ -87,6 +95,7 @@ func (t *TicketTxnIDGetter) Set(txid string, txDbID uint64) {
 	t.idCache[txid] = txDbID
 }
 
+// Set N stores several (transaction hash, DB row ID) pairs in the map.
 func (t *TicketTxnIDGetter) SetN(txid []string, txDbID []uint64) {
 	if t == nil {
 		return
@@ -98,6 +107,7 @@ func (t *TicketTxnIDGetter) SetN(txid []string, txDbID []uint64) {
 	}
 }
 
+// NewTicketTxnIDGetter constructs a new TicketTxnIDGetter with an empty cache.
 func NewTicketTxnIDGetter(db *sql.DB) *TicketTxnIDGetter {
 	return &TicketTxnIDGetter{
 		db:      db,
@@ -701,6 +711,7 @@ func (pgb *ChainDB) StoreBlock(msgBlock *wire.MsgBlock, winningTickets []string,
 			return
 		}
 		winners = tpi.Winners
+		// can also access tpi.Expires
 	}
 
 	// Wrap the message block
@@ -882,9 +893,7 @@ func (pgb *ChainDB) storeTxns(msgBlock *MsgBlockPG, txTree int8,
 			return txRes
 		}
 
-		// Votes
-
-		// Get transaction DB IDs for tickets being spent, if we are updating
+		// Get tickets table row IDs for newly spent tickets, if we are updating
 		// them as we go as opposed to batch mode at the end of a sync.
 		var unspentTicketCache *TicketTxnIDGetter
 		if updateTicketsSpendingInfo {
@@ -894,7 +903,14 @@ func (pgb *ChainDB) storeTxns(msgBlock *MsgBlockPG, txTree int8,
 			unspentTicketCache = pgb.unspentTicketCache
 		}
 
-		voteDbIDs, _, spentTicketHashes, ticketDbIDs, _, err := InsertVotes(pgb.db,
+		// Get information for transactions spending tickets (votes and
+		// revokes), and the ticket DB row IDs themselves.
+		spendingTxDbIDs, spendTypes, spentTicketHashes, ticketDbIDs, err :=
+			pgb.CollectTicketSpendDBInfo(dbTransactions, *TxDbIDs, msgBlock.MsgBlock)
+
+		// Votes
+		// voteDbIDs, voteTxns, spentTicketHashes, ticketDbIDs, missDbIDs, err := ...
+		_, _, _, _, _, err = InsertVotes(pgb.db,
 			dbTransactions, *TxDbIDs, unspentTicketCache, msgBlock, pgb.dupChecks)
 		if err != nil && err != sql.ErrNoRows {
 			log.Error("InsertVotes:", err)
@@ -907,21 +923,15 @@ func (pgb *ChainDB) storeTxns(msgBlock *MsgBlockPG, txTree int8,
 			// row IDs and block heights.
 			//ticketDbIDs := make([]uint64, len(spentTicketHashes))
 			blockHeights := make([]int64, len(spentTicketHashes))
-			spendTypes := make([]TicketSpendType, len(spentTicketHashes))
+			//spendTypes := make([]TicketSpendType, len(spentTicketHashes))
 			for iv := range spentTicketHashes {
-				spendTypes[iv] = TicketVoted
+				//spendTypes[iv] = TicketVoted
 				blockHeights[iv] = int64(msgBlock.Header.Height) /* voteDbTxns[iv].BlockHeight */
-				// ticketDbIDs[iv], _, err =
-				// 	RetrieveTicketIDHeightByHash(pgb.db, spentTicketHashes[iv])
-				// if err != nil {
-				// 	log.Error("RetrieveTxIDHeightByHash:", err)
-				// 	txRes.err = err
-				// 	return txRes
-				// }
 			}
 
 			// Update tickets table with spending info from new votes
-			_, err = SetSpendingForTickets(pgb.db, ticketDbIDs, voteDbIDs, blockHeights, spendTypes)
+			// _, err = SetSpendingForTickets(pgb.db, ticketDbIDs, voteDbIDs, blockHeights, spendTypes)
+			_, err = SetSpendingForTickets(pgb.db, ticketDbIDs, spendingTxDbIDs, blockHeights, spendTypes)
 			if err != nil {
 				log.Warn("SetSpendingForTickets:", err)
 			}
@@ -1025,6 +1035,53 @@ func (pgb *ChainDB) storeTxns(msgBlock *MsgBlockPG, txTree int8,
 	return txRes
 }
 
+func (pgb *ChainDB) CollectTicketSpendDBInfo(dbTxns []*dbtypes.Tx, txDbIDs []uint64,
+	msgBlock *wire.MsgBlock) (spendingTxDbIDs []uint64, spendTypes []TicketSpendType,
+	ticketHashes []string, ticketDbIDs []uint64, err error) {
+	// This only makes sense for stake transactions
+	msgTxns := msgBlock.STransactions
+
+	//var Txns []*dbtypes.Tx
+	//var MsgTxs []*wire.MsgTx
+	for i, tx := range dbTxns {
+		// ensure the transaction slices correspond
+		msgTx := msgTxns[i]
+		if tx.TxID != msgTx.TxHash().String() {
+			err = fmt.Errorf("txid of dbtypes.Tx does not match that of msgTx")
+			return
+		}
+
+		// Filter for votes and revokes only
+		switch tx.TxType {
+		case int16(stake.TxTypeSSGen):
+			spendTypes = append(spendTypes, TicketVoted)
+		case int16(stake.TxTypeSSRtx):
+			spendTypes = append(spendTypes, TicketRevoked)
+		default:
+			continue
+		}
+
+		// Txns = append(Txns, tx)
+		// MsgTxs = append(MsgTxs, msgTx)
+
+		// vote/revoke row ID in *transactions* table
+		spendingTxDbIDs = append(spendingTxDbIDs, txDbIDs[i])
+
+		// ticket hash
+		ticketHash := msgTx.TxIn[1].PreviousOutPoint.Hash.String()
+		ticketHashes = append(ticketHashes, ticketHash)
+
+		// ticket's row ID in *tickets* table
+		t, err0 := pgb.unspentTicketCache.TxnDbID(ticketHash, false)
+		if err0 != nil {
+			err = fmt.Errorf("failed to retrieve ticket DB ID: %v", err0)
+			return
+		}
+		ticketDbIDs = append(ticketDbIDs, t)
+	}
+	return
+}
+
 // UpdateSpendingInfoInAllAddresses completely rebuilds the spending transaction
 // info columns of the address table. This is intended to be use after syncing
 // all other tables and creating their indexes, particularly the indexes on the
@@ -1107,8 +1164,8 @@ func (pgb *ChainDB) UpdateSpendingInfoInAllAddresses() (int64, error) {
 	return numAddresses, err
 }
 
-// UpdateSpendingInfoInAllTickets reviews all votes and revokes (TODO: expires)
-// and sets this spending info in the tickets table.
+// UpdateSpendingInfoInAllTickets reviews all votes and revokes and sets this
+// spending info in the tickets table.
 func (pgb *ChainDB) UpdateSpendingInfoInAllTickets() (int64, error) {
 	// Get the full list of votes (DB IDs and heights), and spent ticket hashes
 	allVotesDbIDs, allVotesHeights, ticketDbIDs, err :=
@@ -1133,5 +1190,43 @@ func (pgb *ChainDB) UpdateSpendingInfoInAllTickets() (int64, error) {
 		log.Warn("SetSpendingForTickets:", err)
 	}
 
-	return totalTicketsUpdated, err
+	// Revokes
+
+	revokeIDs, _, revokeHeights, vinDbIDs, err := RetrieveAllRevokesDbIDHashHeight(pgb.db)
+	if err != nil {
+		log.Errorf("RetrieveAllRevokesDbIDHashHeight: %v", err)
+		return 0, err
+	}
+
+	revokedTicketHashes := make([]string, len(vinDbIDs))
+	for i, vinDbID := range vinDbIDs {
+		revokedTicketHashes[i], err = RetrieveFundingTxByVinDbID(pgb.db, vinDbID)
+		if err != nil {
+			log.Errorf("RetrieveFundingTxByVinDbID: %v", err)
+			return 0, err
+		}
+	}
+
+	revokedTicketDbIDs, err := RetrieveTicketIDsByHashes(pgb.db, revokedTicketHashes)
+	if err != nil {
+		log.Errorf("RetrieveTicketIDsByHashes: %v", err)
+		return 0, err
+	}
+
+	// To update spending info in tickets table, get the spent tickets' DB
+	// row IDs and block heights.
+	spendTypes = make([]TicketSpendType, len(revokedTicketDbIDs))
+	for iv := range revokedTicketDbIDs {
+		spendTypes[iv] = TicketRevoked
+	}
+
+	// Update tickets table with spending info from new votes
+	var revokedTicketsUpdated int64
+	revokedTicketsUpdated, err = SetSpendingForTickets(pgb.db, revokedTicketDbIDs,
+		revokeIDs, revokeHeights, spendTypes)
+	if err != nil {
+		log.Warn("SetSpendingForTickets:", err)
+	}
+
+	return totalTicketsUpdated + revokedTicketsUpdated, err
 }
