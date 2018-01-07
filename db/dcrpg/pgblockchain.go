@@ -1077,7 +1077,8 @@ func (pgb *ChainDB) CollectTicketSpendDBInfo(dbTxns []*dbtypes.Tx, txDbIDs []uin
 		ticketHashes = append(ticketHashes, ticketHash)
 
 		// ticket's row ID in *tickets* table
-		t, err0 := pgb.unspentTicketCache.TxnDbID(ticketHash, false)
+		t, err0 := pgb.unspentTicketCache.TxnDbID(ticketHash,
+			spendType != TicketVoted) // expire cache entry unless a vote
 		if err0 != nil {
 			err = fmt.Errorf("failed to retrieve ticket DB ID: %v", err0)
 			return
