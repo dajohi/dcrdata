@@ -66,6 +66,7 @@ const (
 		SET spend_type = $4, spend_height = $2, spend_tx_db_id = $3, pool_status = $5
 		WHERE purchase_tx_db_id = $1;`
 	SetTicketPoolStatusForTicketDbID = `UPDATE tickets SET pool_status = $2 WHERE id = $1;`
+	SetTicketPoolStatusForHash       = `UPDATE tickets SET pool_status = $2 WHERE tx_hash = $1;`
 
 	// Index
 	IndexTicketsTableOnHashes = `CREATE UNIQUE INDEX uix_ticket_hashes_index

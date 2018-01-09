@@ -559,6 +559,10 @@ func (pgb *ChainDB) DeindexAll() error {
 		log.Warn(err)
 		errAny = err
 	}
+	if err = pgb.DeindexTicketsTable(); err != nil {
+		log.Warn(err)
+		errAny = err
+	}
 	if err = DeindexVotesTableOnCandidate(pgb.db); err != nil {
 		log.Warn(err)
 		errAny = err
@@ -906,6 +910,11 @@ func (pgb *ChainDB) storeTxns(msgBlock *MsgBlockPG, txTree int8,
 		// revokes), and the ticket DB row IDs themselves.
 		spendingTxDbIDs, spendTypes, spentTicketHashes, ticketDbIDs, err :=
 			pgb.CollectTicketSpendDBInfo(dbTransactions, *TxDbIDs, msgBlock.MsgBlock)
+		if err != nil {
+			log.Error("CollectTicketSpendDBInfo:", err)
+			txRes.err = err
+			return txRes
+		}
 
 		// Votes
 		// voteDbIDs, voteTxns, spentTicketHashes, ticketDbIDs, missDbIDs, err := ...
@@ -942,7 +951,7 @@ func (pgb *ChainDB) storeTxns(msgBlock *MsgBlockPG, txTree int8,
 					if !expired {
 						poolStatuses[iv] = PoolStatusMissed
 					} else {
-						poolStatuses[iv] = PoolStatusExpired // TODO: know before the revoke
+						poolStatuses[iv] = PoolStatusExpired
 					}
 				}
 			}
@@ -956,18 +965,40 @@ func (pgb *ChainDB) storeTxns(msgBlock *MsgBlockPG, txTree int8,
 			}
 
 			// Missed but not revoked
-			var unspentMissedTicketDbIDs []uint64
-			for miss, missedTicketID := range missesHashIDs {
+			//var unspentMissedTicketDbIDs []uint64
+			var unspentMissedTicketHashes []string
+			var missStatuses []TicketPoolStatus
+			unspentMisses := make(map[string]struct{})
+			for miss := range missesHashIDs {
 				if _, ok := revokes[miss]; !ok {
 					// unrevoked miss
-					unspentMissedTicketDbIDs = append(unspentMissedTicketDbIDs,
-						missedTicketID)
+					//unspentMissedTicketDbIDs = append(unspentMissedTicketDbIDs, missedTicketID)
+					unspentMissedTicketHashes = append(unspentMissedTicketHashes, miss)
+					unspentMisses[miss] = struct{}{}
+					missStatuses = append(missStatuses, PoolStatusMissed)
 				}
 			}
 
-			missStatuses := ticketpoolStatusSlice(PoolStatusMissed, len(unspentMissedTicketDbIDs))
-			numUnrevokedMisses, err := SetPoolStatusForTickets(pgb.db,
-				unspentMissedTicketDbIDs, missStatuses)
+			// Expired but not revoked
+			unspentExpiresAndMisses := pgb.stakeDB.BestNode.MissedByBlock()
+			unspentEnM := unspentMissedTicketHashes // var unspentEnM []string
+			for _, missHash := range unspentExpiresAndMisses {
+				// MissedByBlock includes tickets that missed votes or expired;
+				// we just want the expires, and not the revoked ones.
+				if pgb.stakeDB.BestNode.ExistsExpiredTicket(missHash) {
+					emHash := missHash.String()
+					// Next check should not be unnecessary. Make sure not in
+					// unspent misses from above and not just revoked.
+					_, justMissed := unspentMisses[emHash]
+					_, justRevoked := revokes[emHash]
+					if !justMissed && !justRevoked {
+						unspentEnM = append(unspentEnM, emHash)
+						missStatuses = append(missStatuses, PoolStatusExpired)
+					}
+				}
+			}
+
+			numUnrevokedMisses, err := SetPoolStatusForTicketsByHash(pgb.db, unspentEnM, missStatuses)
 			if err != nil {
 				log.Warn("SetPoolStatusForTickets", err)
 			} else {

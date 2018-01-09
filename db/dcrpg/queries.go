@@ -285,6 +285,45 @@ func SetPoolStatusForTickets(db *sql.DB, ticketDbIDs []uint64,
 	return totalTicketsUpdated, dbtx.Commit()
 }
 
+func SetPoolStatusForTicketsByHash(db *sql.DB, tickets []string,
+	poolStatuses []TicketPoolStatus) (int64, error) {
+	if len(tickets) == 0 {
+		return 0, nil
+	}
+	dbtx, err := db.Begin()
+	if err != nil {
+		return 0, fmt.Errorf(`unable to begin database transaction: %v`, err)
+	}
+
+	var stmt *sql.Stmt
+	stmt, err = dbtx.Prepare(internal.SetTicketPoolStatusForHash)
+	if err != nil {
+		// Already up a creek. Just return error from Prepare.
+		_ = dbtx.Rollback()
+		return 0, fmt.Errorf("tickets SELECT prepare failed: %v", err)
+	}
+
+	var totalTicketsUpdated int64
+	rowsAffected := make([]int64, len(tickets))
+	for i, ticket := range tickets {
+		rowsAffected[i], err = sqlExecStmt(stmt, "failed to set ticket pool status: ",
+			ticket, poolStatuses[i])
+		if err != nil {
+			_ = stmt.Close()
+			return 0, dbtx.Rollback()
+		}
+		totalTicketsUpdated += rowsAffected[i]
+		if rowsAffected[i] != 1 {
+			log.Warnf("Updated pool status for %d tickets, expecting just 1 (%d)!",
+				rowsAffected[i], ticket)
+		}
+	}
+
+	_ = stmt.Close()
+
+	return totalTicketsUpdated, dbtx.Commit()
+}
+
 func SetSpendingForTickets(db *sql.DB, ticketDbIDs, spendDbIDs []uint64,
 	blockHeights []int64, spendTypes []TicketSpendType,
 	poolStatuses []TicketPoolStatus) (int64, error) {
