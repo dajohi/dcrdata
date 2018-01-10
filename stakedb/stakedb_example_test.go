@@ -42,7 +42,8 @@ func TestExampleConnectBlockHash(t *testing.T) {
 	DIE_IF_ERR(err, t)
 	defer sDB.Close()
 
-	block, blockHash, err := rpcutils.GetBlock(1, nodeClient)
+	height := int64(1)
+	block, blockHash, err := rpcutils.GetBlock(height, nodeClient)
 	DIE_IF_ERR(err, t)
 
 	t.Logf("Block: %v (%v)", block.Height(), blockHash)
@@ -51,6 +52,40 @@ func TestExampleConnectBlockHash(t *testing.T) {
 	DIE_IF_ERR(err, t)
 
 	dbBlock, dbBlockHash, err := sDB.DBState()
+	DIE_IF_ERR(err, t)
+	if dbBlock != uint32(block.Height()) {
+		t.Errorf("Wrong block height: %d vs %d", dbBlock, block.Height())
+	}
+	if *dbBlockHash != *blockHash {
+		t.Errorf("Block hash mismatch: %s vs %s",
+			dbBlockHash.String(), blockHash.String())
+	}
+
+	// next block
+	height = int64(dbBlock) + 1
+	block, blockHash, err = rpcutils.GetBlock(height, nodeClient)
+	DIE_IF_ERR(err, t)
+
+	DIE_IF_ERR(sDB.ConnectBlock(block), t)
+
+	dbBlock, dbBlockHash, err = sDB.DBState()
+	DIE_IF_ERR(err, t)
+	if dbBlock != uint32(block.Height()) {
+		t.Errorf("Wrong block height: %d vs %d", dbBlock, block.Height())
+	}
+	if *dbBlockHash != *blockHash {
+		t.Errorf("Block hash mismatch: %s vs %s",
+			dbBlockHash.String(), blockHash.String())
+	}
+
+	// yay, now disconnect
+	height = int64(dbBlock) - 1
+	block, blockHash, err = rpcutils.GetBlock(height, nodeClient)
+	DIE_IF_ERR(err, t)
+
+	DIE_IF_ERR(sDB.DisconnectBlock(), t)
+
+	dbBlock, dbBlockHash, err = sDB.DBState()
 	DIE_IF_ERR(err, t)
 	if dbBlock != uint32(block.Height()) {
 		t.Errorf("Wrong block height: %d vs %d", dbBlock, block.Height())
