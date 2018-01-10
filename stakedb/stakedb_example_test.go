@@ -49,6 +49,16 @@ func TestExampleConnectBlockHash(t *testing.T) {
 
 	_, err = sDB.ConnectBlockHash(blockHash)
 	DIE_IF_ERR(err, t)
+
+	dbBlock, dbBlockHash, err := sDB.DBState()
+	DIE_IF_ERR(err, t)
+	if dbBlock != uint32(block.Height()) {
+		t.Errorf("Wrong block height: %d vs %d", dbBlock, block.Height())
+	}
+	if *dbBlockHash != *blockHash {
+		t.Errorf("Block hash mismatch: %s vs %s",
+			dbBlockHash.String(), blockHash.String())
+	}
 }
 
 // ConnectNodeRPC attempts to create a new websocket connection to a dcrd node,
