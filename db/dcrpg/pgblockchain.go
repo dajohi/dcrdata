@@ -252,6 +252,13 @@ func (pgb *ChainDB) BlockMissedVotes(blockHash string) ([]string, error) {
 	return RetrieveMissedVotesInBlock(pgb.db, blockHash)
 }
 
+// PoolStatusForTicket retrieves the specified ticket's spend status and ticket
+// pool status, and an error value.
+func (pgb *ChainDB) PoolStatusForTicket(txid string) (dbtypes.TicketSpendType, dbtypes.TicketPoolStatus, error) {
+	_, spendType, poolStatus, err := RetrieveTicketStatusByHash(pgb.db, txid)
+	return spendType, poolStatus, err
+}
+
 // VoutValue retrieves the value of the specified transaction outpoint in atoms.
 func (pgb *ChainDB) VoutValue(txID string, vout uint32) (uint64, error) {
 	// txDbID, _, _, err := RetrieveTxByHash(pgb.db, txID)
@@ -933,14 +940,14 @@ func (pgb *ChainDB) storeTxns(msgBlock *MsgBlockPG, txTree int8,
 			//ticketDbIDs := make([]uint64, len(spentTicketHashes))
 			revokes := make(map[string]uint64)
 			blockHeights := make([]int64, len(spentTicketHashes))
-			poolStatuses := make([]TicketPoolStatus, len(spentTicketHashes))
+			poolStatuses := make([]dbtypes.TicketPoolStatus, len(spentTicketHashes))
 			for iv := range spentTicketHashes {
 				blockHeights[iv] = int64(msgBlock.Header.Height) /* voteDbTxns[iv].BlockHeight */
 
 				switch spendTypes[iv] {
-				case TicketVoted:
-					poolStatuses[iv] = PoolStatusVoted
-				case TicketRevoked:
+				case dbtypes.TicketVoted:
+					poolStatuses[iv] = dbtypes.PoolStatusVoted
+				case dbtypes.TicketRevoked:
 					revokes[spentTicketHashes[iv]] = ticketDbIDs[iv]
 					// Revoke reason
 					h, err0 := chainhash.NewHashFromStr(spentTicketHashes[iv])
@@ -949,9 +956,9 @@ func (pgb *ChainDB) storeTxns(msgBlock *MsgBlockPG, txTree int8,
 					}
 					expired := pgb.stakeDB.BestNode.ExistsExpiredTicket(*h)
 					if !expired {
-						poolStatuses[iv] = PoolStatusMissed
+						poolStatuses[iv] = dbtypes.PoolStatusMissed
 					} else {
-						poolStatuses[iv] = PoolStatusExpired
+						poolStatuses[iv] = dbtypes.PoolStatusExpired
 					}
 				}
 			}
@@ -967,7 +974,7 @@ func (pgb *ChainDB) storeTxns(msgBlock *MsgBlockPG, txTree int8,
 			// Missed but not revoked
 			//var unspentMissedTicketDbIDs []uint64
 			var unspentMissedTicketHashes []string
-			var missStatuses []TicketPoolStatus
+			var missStatuses []dbtypes.TicketPoolStatus
 			unspentMisses := make(map[string]struct{})
 			for miss := range missesHashIDs {
 				if _, ok := revokes[miss]; !ok {
@@ -975,7 +982,7 @@ func (pgb *ChainDB) storeTxns(msgBlock *MsgBlockPG, txTree int8,
 					//unspentMissedTicketDbIDs = append(unspentMissedTicketDbIDs, missedTicketID)
 					unspentMissedTicketHashes = append(unspentMissedTicketHashes, miss)
 					unspentMisses[miss] = struct{}{}
-					missStatuses = append(missStatuses, PoolStatusMissed)
+					missStatuses = append(missStatuses, dbtypes.PoolStatusMissed)
 				}
 			}
 
@@ -993,7 +1000,7 @@ func (pgb *ChainDB) storeTxns(msgBlock *MsgBlockPG, txTree int8,
 					_, justRevoked := revokes[emHash]
 					if !justMissed && !justRevoked {
 						unspentEnM = append(unspentEnM, emHash)
-						missStatuses = append(missStatuses, PoolStatusExpired)
+						missStatuses = append(missStatuses, dbtypes.PoolStatusExpired)
 					}
 				}
 			}
@@ -1001,8 +1008,8 @@ func (pgb *ChainDB) storeTxns(msgBlock *MsgBlockPG, txTree int8,
 			numUnrevokedMisses, err := SetPoolStatusForTicketsByHash(pgb.db, unspentEnM, missStatuses)
 			if err != nil {
 				log.Warn("SetPoolStatusForTickets", err)
-			} else {
-				log.Debugf("Noted %d unrevoked newly-missed tickets.", numUnrevokedMisses)
+			} else if numUnrevokedMisses > 0 {
+				log.Tracef("Noted %d unrevoked newly-missed tickets.", numUnrevokedMisses)
 			}
 		}
 	}
@@ -1105,7 +1112,7 @@ func (pgb *ChainDB) storeTxns(msgBlock *MsgBlockPG, txTree int8,
 }
 
 func (pgb *ChainDB) CollectTicketSpendDBInfo(dbTxns []*dbtypes.Tx, txDbIDs []uint64,
-	msgBlock *wire.MsgBlock) (spendingTxDbIDs []uint64, spendTypes []TicketSpendType,
+	msgBlock *wire.MsgBlock) (spendingTxDbIDs []uint64, spendTypes []dbtypes.TicketSpendType,
 	ticketHashes []string, ticketDbIDs []uint64, err error) {
 	// This only makes sense for stake transactions
 	msgTxns := msgBlock.STransactions
@@ -1120,13 +1127,13 @@ func (pgb *ChainDB) CollectTicketSpendDBInfo(dbTxns []*dbtypes.Tx, txDbIDs []uin
 
 		// Filter for votes and revokes only
 		var stakeSubmissionVinInd int
-		var spendType TicketSpendType
+		var spendType dbtypes.TicketSpendType
 		switch tx.TxType {
 		case int16(stake.TxTypeSSGen):
-			spendType = TicketVoted
+			spendType = dbtypes.TicketVoted
 			stakeSubmissionVinInd = 1
 		case int16(stake.TxTypeSSRtx):
-			spendType = TicketRevoked
+			spendType = dbtypes.TicketRevoked
 		default:
 			continue
 		}
@@ -1147,7 +1154,7 @@ func (pgb *ChainDB) CollectTicketSpendDBInfo(dbTxns []*dbtypes.Tx, txDbIDs []uin
 
 		// ticket's row ID in *tickets* table
 		t, err0 := pgb.unspentTicketCache.TxnDbID(ticketHash,
-			spendType != TicketVoted) // expire cache entry unless a vote
+			spendType != dbtypes.TicketVoted) // expire cache entry unless a vote
 		if err0 != nil {
 			err = fmt.Errorf("failed to retrieve ticket DB ID: %v", err0)
 			return
@@ -1252,11 +1259,11 @@ func (pgb *ChainDB) UpdateSpendingInfoInAllTickets() (int64, error) {
 
 	// To update spending info in tickets table, get the spent tickets' DB
 	// row IDs and block heights.
-	spendTypes := make([]TicketSpendType, len(ticketDbIDs))
+	spendTypes := make([]dbtypes.TicketSpendType, len(ticketDbIDs))
 	for iv := range ticketDbIDs {
-		spendTypes[iv] = TicketVoted
+		spendTypes[iv] = dbtypes.TicketVoted
 	}
-	poolStatuses := ticketpoolStatusSlice(PoolStatusVoted, len(ticketDbIDs))
+	poolStatuses := ticketpoolStatusSlice(dbtypes.PoolStatusVoted, len(ticketDbIDs))
 
 	// Update tickets table with spending info from new votes
 	var totalTicketsUpdated int64
@@ -1289,19 +1296,19 @@ func (pgb *ChainDB) UpdateSpendingInfoInAllTickets() (int64, error) {
 		return 0, err
 	}
 
-	poolStatuses = ticketpoolStatusSlice(PoolStatusMissed, len(revokedTicketHashes))
+	poolStatuses = ticketpoolStatusSlice(dbtypes.PoolStatusMissed, len(revokedTicketHashes))
 	for ih := range revokedTicketHashes {
 		rh, _ := chainhash.NewHashFromStr(revokedTicketHashes[ih])
 		if pgb.stakeDB.BestNode.ExistsExpiredTicket(*rh) {
-			poolStatuses[ih] = PoolStatusExpired
+			poolStatuses[ih] = dbtypes.PoolStatusExpired
 		}
 	}
 
 	// To update spending info in tickets table, get the spent tickets' DB
 	// row IDs and block heights.
-	spendTypes = make([]TicketSpendType, len(revokedTicketDbIDs))
+	spendTypes = make([]dbtypes.TicketSpendType, len(revokedTicketDbIDs))
 	for iv := range revokedTicketDbIDs {
-		spendTypes[iv] = TicketRevoked
+		spendTypes[iv] = dbtypes.TicketRevoked
 	}
 
 	// Update tickets table with spending info from new votes
@@ -1315,8 +1322,8 @@ func (pgb *ChainDB) UpdateSpendingInfoInAllTickets() (int64, error) {
 	return totalTicketsUpdated + revokedTicketsUpdated, err
 }
 
-func ticketpoolStatusSlice(ss TicketPoolStatus, N int) []TicketPoolStatus {
-	S := make([]TicketPoolStatus, N)
+func ticketpoolStatusSlice(ss dbtypes.TicketPoolStatus, N int) []dbtypes.TicketPoolStatus {
+	S := make([]dbtypes.TicketPoolStatus, N)
 	for ip := range S {
 		S[ip] = ss
 	}
