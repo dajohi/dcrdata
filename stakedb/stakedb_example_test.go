@@ -7,18 +7,17 @@ import (
 	"testing"
 
 	"github.com/dcrdata/dcrdata/rpcutils"
-
 	"github.com/dcrdata/dcrdata/semver"
 	"github.com/decred/dcrd/chaincfg"
 	"github.com/decred/dcrd/rpcclient"
 )
 
 const (
-	host = "localhost:9109"
-	user = "jdcrd"
-	pass = "jdcrd"
-	cert
-	disableTLS = true
+	host       = "localhost:9109"
+	user       = "jdcrd"
+	pass       = "jdcrd"
+	cert       = "dcrd.cert"
+	disableTLS = false
 )
 
 var (
