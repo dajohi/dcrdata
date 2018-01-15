@@ -125,11 +125,12 @@ func TestExampleConnectBlockHash(t *testing.T) {
 	t.Logf("%d live tickets, %d missed tickets (%d just missed)",
 		len(liveTickets), len(allMissed), len(justMissed))
 
-	// super, now go to StakeValidationHeight + TicketExpiry
+	// super, now go to StakeValidationHeight + TicketExpiry + 21 to see a
+	// ticket expire.
 	t.Logf("OK, this will take about 6 minutes...")
 	startTime = time.Now()
 	startHeight = height
-	for height < activeNet.StakeValidationHeight+int64(activeNet.TicketExpiry) {
+	for height < activeNet.StakeValidationHeight+int64(activeNet.TicketExpiry)+21 {
 		height = int64(dbBlock) + 1
 		block, blockHash, err = rpcutils.GetBlock(height, nodeClient)
 		DIE_IF_ERR(err, t)
