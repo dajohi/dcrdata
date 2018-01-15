@@ -35,12 +35,11 @@ func TestExampleConnectBlockHash(t *testing.T) {
 	nodeClient, _, err := ConnectNodeRPC(host, user, pass, cert, disableTLS)
 	DIE_IF_ERR(err, t)
 
-	dbName := "stakedb_test"
-	DIE_IF_ERR(os.RemoveAll("./"+dbName), t)
+	DIE_IF_ERR(os.RemoveAll("./ffldb_stake"), t)
 
-	sDB, err := NewStakeDatabase(nodeClient, activeNet, "stakedb_test")
+	sDB, err := NewStakeDatabase(nodeClient, activeNet)
 	DIE_IF_ERR(err, t)
-	defer sDB.Close()
+	defer sDB.StakeDB.Close()
 
 	height := int64(1)
 	block, blockHash, err := rpcutils.GetBlock(height, nodeClient)
