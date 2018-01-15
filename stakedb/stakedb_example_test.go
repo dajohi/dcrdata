@@ -5,6 +5,7 @@ import (
 	"io/ioutil"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/dcrdata/dcrdata/rpcutils"
 	"github.com/dcrdata/dcrdata/semver"
@@ -92,6 +93,36 @@ func TestExampleConnectBlockHash(t *testing.T) {
 		t.Errorf("Block hash mismatch: %s vs %s",
 			dbBlockHash.String(), blockHash.String())
 	}
+
+	// great, now go to StakeValidationHeight + 21
+	startTime := time.Now()
+	startHeight := height
+	for height < activeNet.StakeValidationHeight+21 {
+		height = int64(dbBlock) + 1
+		block, blockHash, err = rpcutils.GetBlock(height, nodeClient)
+		DIE_IF_ERR(err, t)
+
+		DIE_IF_ERR(sDB.ConnectBlock(block), t)
+
+		dbBlock, dbBlockHash, err = sDB.DBState()
+		DIE_IF_ERR(err, t)
+		if dbBlock != uint32(block.Height()) {
+			t.Errorf("Wrong block height: %d vs %d", dbBlock, block.Height())
+		}
+		if *dbBlockHash != *blockHash {
+			t.Errorf("Block hash mismatch: %s vs %s",
+				dbBlockHash.String(), blockHash.String())
+		}
+	}
+	dur := time.Since(startTime)
+	t.Logf("Advanced to block %d (%s) successfully in %v (%.2f blocks/sec).",
+		dbBlock, dbBlockHash, dur, float64(height-startHeight)/dur.Seconds())
+
+	liveTickets := sDB.BestNode.LiveTickets()
+	justMissed := sDB.BestNode.MissedByBlock()
+	allMissed := sDB.BestNode.MissedTickets()
+	t.Logf("%d live tickets, %d missed tickets (%d just missed)",
+		len(liveTickets), len(allMissed), len(justMissed))
 }
 
 // ConnectNodeRPC attempts to create a new websocket connection to a dcrd node,
