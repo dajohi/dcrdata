@@ -10,6 +10,7 @@ import (
 	"github.com/dcrdata/dcrdata/rpcutils"
 	"github.com/dcrdata/dcrdata/semver"
 	"github.com/decred/dcrd/chaincfg"
+	"github.com/decred/dcrd/chaincfg/chainhash"
 	"github.com/decred/dcrd/rpcclient"
 )
 
@@ -123,6 +124,42 @@ func TestExampleConnectBlockHash(t *testing.T) {
 	allMissed := sDB.BestNode.MissedTickets()
 	t.Logf("%d live tickets, %d missed tickets (%d just missed)",
 		len(liveTickets), len(allMissed), len(justMissed))
+
+	// super, now go to StakeValidationHeight + TicketExpiry
+	t.Logf("OK, this will take about 6 minutes...")
+	startTime = time.Now()
+	startHeight = height
+	for height < activeNet.StakeValidationHeight+int64(activeNet.TicketExpiry) {
+		height = int64(dbBlock) + 1
+		block, blockHash, err = rpcutils.GetBlock(height, nodeClient)
+		DIE_IF_ERR(err, t)
+
+		DIE_IF_ERR(sDB.ConnectBlock(block), t)
+
+		dbBlock, dbBlockHash, err = sDB.DBState()
+		DIE_IF_ERR(err, t)
+		if dbBlock != uint32(block.Height()) {
+			t.Errorf("Wrong block height: %d vs %d", dbBlock, block.Height())
+		}
+		if *dbBlockHash != *blockHash {
+			t.Errorf("Block hash mismatch: %s vs %s",
+				dbBlockHash.String(), blockHash.String())
+		}
+	}
+	dur = time.Since(startTime)
+	t.Logf("Advanced to block %d (%s) successfully in %v (%.2f blocks/sec).",
+		dbBlock, dbBlockHash, dur, float64(height-startHeight)/dur.Seconds())
+
+	expiredTicketHash := "2d80b5d3a4a5e584a53fd3c1cc3e9b3ad436fc9bf1434545cbf0160b4c394c33"
+	h, _ := chainhash.NewHashFromStr(expiredTicketHash)
+
+	liveTickets = sDB.BestNode.LiveTickets()
+	justMissed = sDB.BestNode.MissedByBlock()
+	allMissed = sDB.BestNode.MissedTickets()
+	t.Logf("%d live tickets, %d missed tickets (%d just missed)",
+		len(liveTickets), len(allMissed), len(justMissed))
+
+	t.Logf("Ticket %s is expired: %v", expiredTicketHash, sDB.BestNode.ExistsExpiredTicket(*h))
 }
 
 // ConnectNodeRPC attempts to create a new websocket connection to a dcrd node,
