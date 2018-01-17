@@ -66,6 +66,7 @@ type StakeDatabase struct {
 	liveTicketMtx   sync.Mutex
 	liveTicketCache map[chainhash.Hash]int64
 	poolInfo        *PoolInfoCache
+	PoolDB          *TicketPool
 }
 
 const (
@@ -78,12 +79,18 @@ const (
 // NewStakeDatabase creates a StakeDatabase instance, opening or creating a new
 // ffldb-backed stake database, and loads all live tickets into a cache.
 func NewStakeDatabase(client *rpcclient.Client, params *chaincfg.Params) (*StakeDatabase, error) {
+	poolDB, err := NewTicketPool("stakedb_ticket_pool.db")
+	if err != nil {
+		return nil, fmt.Errorf("unable to open ticket pool DB: %v", err)
+	}
+
 	sDB := &StakeDatabase{
 		params:          params,
 		NodeClient:      client,
 		blockCache:      make(map[int64]*dcrutil.Block),
 		liveTicketCache: make(map[chainhash.Hash]int64),
 		poolInfo:        NewPoolInfoCache(),
+		PoolDB:          poolDB,
 	}
 	if err := sDB.Open(); err != nil {
 		return nil, err
@@ -92,6 +99,16 @@ func NewStakeDatabase(client *rpcclient.Client, params *chaincfg.Params) (*Stake
 	nodeHeight, err := client.GetBlockCount()
 	if err != nil {
 		log.Errorf("Unable to get best block height: %v", err)
+	}
+
+	if int64(sDB.Height()) != sDB.PoolDB.Tip() {
+		return nil, fmt.Errorf("StakeDB height (%d) and TicketPool (%d) height not equal.",
+			sDB.Height(), sDB.PoolDB.Tip())
+	}
+
+	log.Infof("Advancing ticket pool DB to tip via diffs...")
+	if err = poolDB.AdvanceToTip(); err != nil {
+		return nil, fmt.Errorf("failed to advance ticket pool DB to tip: %v", err)
 	}
 
 	if int64(sDB.Height()) >= nodeHeight-int64(params.TicketPoolSize)/4 {
@@ -224,7 +241,7 @@ func (db *StakeDatabase) ConnectBlock(block *dcrutil.Block) error {
 	db.blkMtx.Unlock()
 
 	revokedTickets := txhelpers.RevokedTicketsInBlock(block)
-	spentTickets := txhelpers.TicketsSpentInBlock(block)
+	votedTickets := txhelpers.TicketsSpentInBlock(block)
 
 	db.nodeMtx.Lock()
 	bestNodeHeight := int64(db.BestNode.Height())
@@ -233,7 +250,33 @@ func (db *StakeDatabase) ConnectBlock(block *dcrutil.Block) error {
 		return fmt.Errorf("cannot connect block height %d at height %d", height, bestNodeHeight)
 	}
 
-	return db.connectBlock(block, spentTickets, revokedTickets, maturingTickets)
+	// who is supposed to vote on this block
+	winners := db.BestNode.Winners()
+
+	// connect it
+	err := db.connectBlock(block, votedTickets, revokedTickets, maturingTickets)
+	if err != nil {
+		return err
+	}
+
+	// so, who missed? who expired?
+	justMissed := db.BestNode.MissedByBlock() // includes expired
+	var expiring []chainhash.Hash
+	for i := range justMissed {
+		if db.BestNode.ExistsExpiredTicket(justMissed[i]) {
+			if !db.BestNode.ExistsRevokedTicket(justMissed[i]) {
+				expiring = append(expiring, justMissed[i])
+			}
+		}
+	}
+	liveOut := append(winners, expiring...)
+
+	poolDiff := &PoolDiff{
+		In:  maturingTickets,
+		Out: liveOut,
+	}
+
+	return db.PoolDB.AppendAndAdvancePool(poolDiff, bestNodeHeight+1)
 }
 
 func (db *StakeDatabase) connectBlock(block *dcrutil.Block, spent []chainhash.Hash,
@@ -293,6 +336,18 @@ func (db *StakeDatabase) disconnectBlock() error {
 	}
 	if parentBlock.Height() != int64(childHeight)-1 {
 		panic("BestNode and stake DB are inconsistent")
+	}
+
+	poolDBTip := db.PoolDB.Trim()
+	if poolDBTip != parentBlock.Height() {
+		log.Warnf("Pool DB tip (%d) not equal to stakeDB height (%d)!",
+			poolDBTip, parentBlock.Height())
+		for poolDBTip > parentBlock.Height() {
+			poolDBTip = db.PoolDB.Trim()
+		}
+		if poolDBTip != parentBlock.Height() {
+			log.Errorf("Unable to trim pool DB!")
+		}
 	}
 
 	childUndoData := append(stake.UndoTicketDataSlice(nil), db.BestNode.UndoData()...)
@@ -392,6 +447,19 @@ func (db *StakeDatabase) Open() error {
 	}
 
 	return err
+}
+
+// Close closes the database.
+func (db *StakeDatabase) Close() error {
+	err1 := db.PoolDB.Close()
+	err2 := db.StakeDB.Close()
+	if err1 == nil {
+		return err2
+	}
+	if err2 == nil {
+		return err1
+	}
+	return fmt.Errorf("%v + %v", err1, err2)
 }
 
 // PoolInfoBest computes ticket pool value using the database and, if needed, the
