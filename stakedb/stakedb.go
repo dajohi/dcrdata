@@ -79,6 +79,7 @@ const (
 // NewStakeDatabase creates a StakeDatabase instance, opening or creating a new
 // ffldb-backed stake database, and loads all live tickets into a cache.
 func NewStakeDatabase(client *rpcclient.Client, params *chaincfg.Params) (*StakeDatabase, error) {
+	log.Infof("Loading ticket pool DB...")
 	poolDB, err := NewTicketPool("stakedb_ticket_pool.db")
 	if err != nil {
 		return nil, fmt.Errorf("unable to open ticket pool DB: %v", err)
@@ -276,7 +277,7 @@ func (db *StakeDatabase) ConnectBlock(block *dcrutil.Block) error {
 		Out: liveOut,
 	}
 
-	return db.PoolDB.AppendAndAdvancePool(poolDiff, bestNodeHeight+1)
+	return db.PoolDB.Append(poolDiff, bestNodeHeight+1)
 }
 
 func (db *StakeDatabase) connectBlock(block *dcrutil.Block, spent []chainhash.Hash,
@@ -352,7 +353,7 @@ func (db *StakeDatabase) disconnectBlock() error {
 
 	childUndoData := append(stake.UndoTicketDataSlice(nil), db.BestNode.UndoData()...)
 
-	log.Debugf("Disconnecting block %d.", childHeight)
+	log.Tracef("Disconnecting block %d.", childHeight)
 
 	// previous best node
 	var parentStakeNode *stake.Node
@@ -520,6 +521,20 @@ func (db *StakeDatabase) PoolInfo(hash chainhash.Hash) (*apitypes.TicketPoolInfo
 // PoolSize returns the ticket pool size in the best node of the stake database
 func (db *StakeDatabase) PoolSize() int {
 	return db.BestNode.PoolSize()
+}
+
+// PoolAtHeight ...
+func (db *StakeDatabase) PoolAtHeight(height int64) ([]chainhash.Hash, error) {
+	return db.PoolDB.Pool(height)
+}
+
+// PoolAtHash ...
+func (db *StakeDatabase) PoolAtHash(hash chainhash.Hash) ([]chainhash.Hash, error) {
+	header, err := db.NodeClient.GetBlockHeader(&hash)
+	if err != nil {
+		return nil, fmt.Errorf("GetBlockHeader failed: %v", err)
+	}
+	return db.PoolDB.Pool(int64(header.Height))
 }
 
 // DBState queries the stake database for the best block height and hash.

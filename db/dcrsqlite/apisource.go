@@ -575,6 +575,37 @@ func (db *wiredDB) GetBlockSizeRange(idx0, idx1 int) ([]int32, error) {
 	return blockSizes, nil
 }
 
+func (db *wiredDB) GetPool(idx int) ([]string, error) {
+	hs, err := db.sDB.PoolDB.Pool(int64(idx))
+	if err != nil {
+		log.Errorf("Unable to get ticket pool from stakedb: %v", err)
+		return nil, err
+	}
+	hss := make([]string, 0, len(hs))
+	for i := range hs {
+		hss = append(hss, hs[i].String())
+	}
+	return hss, nil
+}
+
+func (db *wiredDB) GetPoolByHash(hash string) ([]string, error) {
+	idx, err := db.GetBlockHeight(hash)
+	if err != nil {
+		log.Errorf("Unable to retrieve block height for hash %s: %v", hash, err)
+		return nil, err
+	}
+	hs, err := db.sDB.PoolDB.Pool(idx)
+	if err != nil {
+		log.Errorf("Unable to get ticket pool from stakedb: %v", err)
+		return nil, err
+	}
+	hss := make([]string, 0, len(hs))
+	for i := range hs {
+		hss = append(hss, hs[i].String())
+	}
+	return hss, nil
+}
+
 func (db *wiredDB) GetPoolInfo(idx int) *apitypes.TicketPoolInfo {
 	ticketPoolInfo, err := db.RetrievePoolInfo(int64(idx))
 	if err != nil {

@@ -49,8 +49,8 @@ func NewTicketPool(dbFile string) (*TicketPool, error) {
 	return &TicketPool{
 		RWMutex: new(sync.RWMutex),
 		pool:    make(map[chainhash.Hash]struct{}),
-		diffs:   diffs, // make([]PoolDiff, 0, 100000),
-		tip:     int64(len(diffs)),
+		diffs:   diffs,             // make([]PoolDiff, 0, 100000),
+		tip:     int64(len(diffs)), // number of blocks connected over genesis
 		diffDB:  db,
 	}, nil
 }
@@ -78,14 +78,14 @@ func (tp *TicketPool) append(diff *PoolDiff) {
 
 func (tp *TicketPool) trim() int64 {
 	if tp.tip == 0 || len(tp.diffs) == 0 {
-		tp.tip = 0
 		return tp.tip
 	}
 	tp.tip--
-	tp.diffs = tp.diffs[:len(tp.diffs)-1]
-	if tp.cursor >= tp.tip {
-		tp.retreatTo(tp.tip)
+	newMaxCursor := tp.maxCursor()
+	if tp.cursor > newMaxCursor {
+		tp.retreatTo(newMaxCursor)
 	}
+	tp.diffs = tp.diffs[:len(tp.diffs)-1]
 	return tp.tip
 }
 
@@ -158,6 +158,7 @@ func (tp *TicketPool) CurrentPoolSize() int {
 func (tp *TicketPool) Pool(height int64) ([]chainhash.Hash, error) {
 	tp.Lock()
 	defer tp.Unlock()
+
 	if height > tp.tip {
 		return nil, fmt.Errorf("block height %d is not connected yet, tip is %d", height, tp.tip)
 	}
@@ -177,7 +178,7 @@ func (tp *TicketPool) Pool(height int64) ([]chainhash.Hash, error) {
 }
 
 func (tp *TicketPool) advance() error {
-	if tp.cursor == tp.tip {
+	if tp.cursor > tp.maxCursor() {
 		return fmt.Errorf("cursor at tip, unable to advance")
 	}
 
@@ -191,10 +192,14 @@ func (tp *TicketPool) advance() error {
 	if len(tp.pool) != expectedFinalSize {
 		return fmt.Errorf("pool size is %d, expected %d", len(tp.pool), expectedFinalSize)
 	}
+
 	return nil
 }
 
 func (tp *TicketPool) advanceTo(height int64) error {
+	if height > tp.tip {
+		return fmt.Errorf("cannot advance past tip")
+	}
 	for height > tp.cursor {
 		if err := tp.advance(); err != nil {
 			return err
@@ -225,7 +230,17 @@ func (tp *TicketPool) retreat() error {
 	return nil
 }
 
+func (tp *TicketPool) maxCursor() int64 {
+	if tp.tip == 0 {
+		return 0
+	}
+	return tp.tip - 1
+}
+
 func (tp *TicketPool) retreatTo(height int64) error {
+	if height < 0 || height > tp.tip {
+		return fmt.Errorf("Invalid destination cursor %d", height)
+	}
 	for tp.cursor > height {
 		if err := tp.retreat(); err != nil {
 			return err

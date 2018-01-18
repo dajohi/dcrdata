@@ -179,7 +179,7 @@ func TestTicketPoolAppendInvalid(t *testing.T) {
 	if newTip != tip+1 {
 		t.Errorf("new tip incorrect. expected %d, got %d", tip+1, newTip)
 	}
-	tip++
+	//tip++
 
 	poolSize = p.CurrentPoolSize()
 	if poolSize != initPoolSize {
@@ -250,13 +250,13 @@ func TestTicketPoolRetreat(t *testing.T) {
 	if newTip != tip {
 		t.Errorf("tip changed. expected %d, got %d", tip+1, newTip)
 	}
-	tip++
+	//tip++
 
 	newCursor = p.Cursor()
 	if newCursor != cursor-1 {
 		t.Errorf("cursor incorrect. expected %d, got %d", cursor-1, newCursor)
 	}
-	cursor++
+	//cursor++
 }
 
 func TestTicketPoolHeight(t *testing.T) {
