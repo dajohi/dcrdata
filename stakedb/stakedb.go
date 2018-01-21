@@ -1,3 +1,4 @@
+// Copyright (c) 2018, The dcrdata developers.
 // Copyright (c) 2017, Jonathan Chappelow
 // See LICENSE for details.
 
@@ -103,8 +104,8 @@ func NewStakeDatabase(client *rpcclient.Client, params *chaincfg.Params) (*Stake
 	}
 
 	if int64(sDB.Height()) != sDB.PoolDB.Tip() {
-		return nil, fmt.Errorf("StakeDB height (%d) and TicketPool (%d) height not equal.",
-			sDB.Height(), sDB.PoolDB.Tip())
+		return nil, fmt.Errorf("StakeDB height (%d) and TicketPool (%d) height not equal."+
+			"Delete both and try again", sDB.Height(), sDB.PoolDB.Tip())
 	}
 
 	log.Infof("Advancing ticket pool DB to tip via diffs...")
@@ -260,7 +261,7 @@ func (db *StakeDatabase) ConnectBlock(block *dcrutil.Block) error {
 		return err
 	}
 
-	// so, who missed? who expired?
+	// Update the ticket pool db. Determine newly missed and expired tickets.
 	justMissed := db.BestNode.MissedByBlock() // includes expired
 	var expiring []chainhash.Hash
 	for i := range justMissed {
@@ -270,13 +271,16 @@ func (db *StakeDatabase) ConnectBlock(block *dcrutil.Block) error {
 			}
 		}
 	}
-	liveOut := append(winners, expiring...)
 
+	// Tickets leaving the live ticket pool = winners + expires
+	liveOut := append(winners, expiring...)
+	// Tickets entering the pool = maturing tickets
 	poolDiff := &PoolDiff{
 		In:  maturingTickets,
 		Out: liveOut,
 	}
 
+	// Append this ticket pool diff
 	return db.PoolDB.Append(poolDiff, bestNodeHeight+1)
 }
 
@@ -339,10 +343,12 @@ func (db *StakeDatabase) disconnectBlock() error {
 		panic("BestNode and stake DB are inconsistent")
 	}
 
+	// Trim the best block from the ticket pool db
 	poolDBTip := db.PoolDB.Trim()
 	if poolDBTip != parentBlock.Height() {
 		log.Warnf("Pool DB tip (%d) not equal to stakeDB height (%d)!",
 			poolDBTip, parentBlock.Height())
+		// Try to recover by trimming further if a previous disconnect failed
 		for poolDBTip > parentBlock.Height() {
 			poolDBTip = db.PoolDB.Trim()
 		}
@@ -523,12 +529,12 @@ func (db *StakeDatabase) PoolSize() int {
 	return db.BestNode.PoolSize()
 }
 
-// PoolAtHeight ...
+// PoolAtHeight gets the entire list of live tickets at the given chain height.
 func (db *StakeDatabase) PoolAtHeight(height int64) ([]chainhash.Hash, error) {
 	return db.PoolDB.Pool(height)
 }
 
-// PoolAtHash ...
+// PoolAtHash gets the entire list of live tickets at the given block hash.
 func (db *StakeDatabase) PoolAtHash(hash chainhash.Hash) ([]chainhash.Hash, error) {
 	header, err := db.NodeClient.GetBlockHeader(&hash)
 	if err != nil {

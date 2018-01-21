@@ -54,6 +54,8 @@ var (
 		42078, 41450}
 )
 
+// TestTicketPoolTraverseFull tests AdvanceToTip and Pool for random access.
+// After each Pool call, it checks the pool size against the expected size.
 func TestTicketPoolTraverseFull(t *testing.T) {
 	if _, err := os.Stat(dbFileFull); err != nil {
 		t.Skipf("%s not found, skipping TestTicketPoolTraverseFull", dbFileFull)
@@ -118,9 +120,12 @@ func TestTicketPoolTraverseFull(t *testing.T) {
 				spot, poolSizes[i], pss[i])
 		}
 	}
-	// log.Info(pss)
 }
 
+// TestTicketPoolAppendInvalid ensures that AppendAndAdvancePool (advance) will
+// error if non-existing tickets are listed in Out slice of a PoolDiff. It also
+// tests correct use of AppendAndAdvancePool, verifying that tickets are removed
+// from the pool as expected.
 func TestTicketPoolAppendInvalid(t *testing.T) {
 	if err := os.Remove(dbFile); err != nil && !os.IsNotExist(err) {
 		t.Fatalf("Failed to delete db file: %v", err)
@@ -187,6 +192,7 @@ func TestTicketPoolAppendInvalid(t *testing.T) {
 	}
 }
 
+// TestTicketPoolRetreat tests retreat.
 func TestTicketPoolRetreat(t *testing.T) {
 	if err := os.Remove(dbFile); err != nil && !os.IsNotExist(err) {
 		t.Fatalf("Failed to delete db file: %v", err)
@@ -259,6 +265,7 @@ func TestTicketPoolRetreat(t *testing.T) {
 	//cursor++
 }
 
+// TestTicketPoolHeight tests Pool(height).
 func TestTicketPoolHeight(t *testing.T) {
 	if err := os.Remove(dbFile); err != nil && !os.IsNotExist(err) {
 		t.Fatalf("Failed to delete db file: %v", err)
@@ -339,6 +346,8 @@ func TestTicketPoolHeight(t *testing.T) {
 	}
 }
 
+// TestTicketPoolPersistent tests the persistent DB by loading a referece .db
+// file, and verifies its state is as expected, and Pool works on it.
 func TestTicketPoolPersistent(t *testing.T) {
 	p, err := NewTicketPool(dbFileRef)
 	if err != nil {
