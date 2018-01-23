@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"sort"
 	"strconv"
 	"sync"
 
@@ -939,6 +940,12 @@ func (c *appContext) getTicketPool(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, http.StatusText(422), 422)
 		return
 	}
+
+	sortPool := r.URL.Query().Get("sort")
+	if sortPool == "1" || sortPool == "true" {
+		sort.Strings(tp)
+	}
+
 	writeJSON(w, tp, c.getIndentQuery(r))
 }
 
