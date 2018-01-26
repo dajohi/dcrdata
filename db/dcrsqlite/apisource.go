@@ -95,6 +95,8 @@ func (db *wiredDB) ChargePoolInfoCache(startHeight int64) error {
 	if err != nil {
 		return err
 	}
+	log.Debugf("Pre-loading pool info for %d blocks ([%d, %d]) into cache.",
+		len(tpis), startHeight, endHeight)
 	for i := range tpis {
 		hash, err := chainhash.NewHashFromStr(blockHashes[i])
 		if err != nil {
