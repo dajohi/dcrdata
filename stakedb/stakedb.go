@@ -96,7 +96,7 @@ func NewStakeDatabase(client *rpcclient.Client, params *chaincfg.Params,
 	if err != nil {
 		return nil, fmt.Errorf("unable to open ticket pool DB: %v", err)
 	}
-	
+
 	sDB := &StakeDatabase{
 		params:          params,
 		NodeClient:      client,
@@ -196,12 +196,12 @@ func NewStakeDatabase(client *rpcclient.Client, params *chaincfg.Params,
 // unlike using db.BestNode.Height(), and checks that the stake database is
 // opened first.
 func (db *StakeDatabase) Height() uint32 {
+	db.nodeMtx.RLock()
+	defer db.nodeMtx.RUnlock()
 	if db == nil || db.BestNode == nil {
 		log.Error("Stake database not yet opened")
 		return 0
 	}
-	db.nodeMtx.RLock()
-	defer db.nodeMtx.RUnlock()
 	return db.BestNode.Height()
 }
 
@@ -383,7 +383,7 @@ func (db *StakeDatabase) disconnectBlock() error {
 
 	childUndoData := append(stake.UndoTicketDataSlice(nil), db.BestNode.UndoData()...)
 
-	log.Tracef("Disconnecting block %d.", childHeight)
+	log.Debugf("Disconnecting block %d.", childHeight)
 
 	// previous best node
 	var parentStakeNode *stake.Node
