@@ -145,6 +145,8 @@ func NewChainDB(dbi *DBInfo, params *chaincfg.Params, stakeDB *stakedb.StakeData
 	}
 
 	if err = setupTables(db); err != nil {
+		log.Warnf("ATTENTION! %v", err)
+		// TODO: Actually handle the upgrades/reindexing somewhere.
 		return nil, err
 	}
 
@@ -200,7 +202,27 @@ func setupTables(db *sql.DB) error {
 
 	vers := TableVersions(db)
 	for tab, ver := range vers {
-		log.Debugf("Table %s: v%d", tab, ver)
+		log.Debugf("Table %s: v%s", tab, ver)
+	}
+	// if tableUpgrades := TableUpgradesRequired(vers); len(tableUpgrades) > 0 {
+	// 	for _, u := range tableUpgrades {
+	// 		log.Warnf(u.String())
+	// 	}
+	// 	return fmt.Errorf("table maintenance required")
+	// }
+	return nil
+}
+
+func (pgb *ChainDB) VersionCheck() error {
+	vers := TableVersions(pgb.db)
+	for tab, ver := range vers {
+		log.Debugf("Table %s: v%s", tab, ver)
+	}
+	if tableUpgrades := TableUpgradesRequired(vers); len(tableUpgrades) > 0 {
+		for _, u := range tableUpgrades {
+			log.Warnf(u.String())
+		}
+		return fmt.Errorf("table maintenance required")
 	}
 	return nil
 }
