@@ -17,74 +17,74 @@
 // Based on ws_events_dispatcher.js by Ismael Celis
 
 function forward (event, message, handlers) {
-  if (typeof handlers[event] === 'undefined') return
+  if (typeof handlers[event] === "undefined") return;
   // call each handler
-  for (var i = 0; i < handlers[event].length; i++) {
-    handlers[event][i](message)
+  for (let i = 0; i < handlers[event].length; i++) {
+    handlers[event][i](message);
   }
 }
 
 class MessageSocket {
   constructor () {
-    this.uri = undefined
-    this.connection = undefined
-    this.handlers = {}
+    this.uri = undefined;
+    this.connection = undefined;
+    this.handlers = {};
   }
 
   registerEvtHandler (eventID, handler) {
-    this.handlers[eventID] = this.handlers[eventID] || []
-    this.handlers[eventID].push(handler)
+    this.handlers[eventID] = this.handlers[eventID] || [];
+    this.handlers[eventID].push(handler);
   }
 
   deregisterEvtHandlers (eventID) {
-    this.handlers[eventID] = []
+    this.handlers[eventID] = [];
   }
 
   // send a message back to the server
   send (eventID, message) {
-    if (this.connection === undefined) { return }
-    var payload = JSON.stringify({
+    if (this.connection === undefined) { return; }
+    const payload = JSON.stringify({
       event: eventID,
       message: message
-    })
-    console.log('send', payload)
-    this.connection.send(payload)
+    });
+    console.log("send", payload);
+    this.connection.send(payload);
   }
 
   connect (uri) {
-    this.uri = uri
-    this.connection = new window.WebSocket(uri)
+    this.uri = uri;
+    this.connection = new window.WebSocket(uri);
 
     this.close = (reason) => {
-      console.log('close, reason:', reason, this.handlers)
-      clearTimeout(pinger)
-      this.handlers = {}
-      this.connection.close()
-    }
+      console.log("close, reason:", reason, this.handlers);
+      clearTimeout(pinger);
+      this.handlers = {};
+      this.connection.close();
+    };
 
     // unmarshall message, and forward the message to registered handlers
     this.connection.onmessage = (evt) => {
-      var json = JSON.parse(evt.data)
-      forward(json.event, json.message, this.handlers)
-    }
+      const json = JSON.parse(evt.data);
+      forward(json.event, json.message, this.handlers);
+    };
 
     // Stub out standard functions
     this.connection.onclose = () => {
-      forward('close', null, this.handlers)
-    }
+      forward("close", null, this.handlers);
+    };
     this.connection.onopen = () => {
-      forward('open', null, this.handlers)
-    }
+      forward("open", null, this.handlers);
+    };
     this.connection.onerror = (evt) => {
-      forward('error', evt, this.handlers)
-    }
+      forward("error", evt, this.handlers);
+    };
 
     // Start ping pong
     var pinger = setInterval(() => {
-      this.send('ping', 'sup')
-    }, 7000)
+      this.send("ping", "sup");
+    }, 7000);
   }
 }
 
-let ws = new MessageSocket()
-export default ws
+const ws = new MessageSocket();
+export default ws;
