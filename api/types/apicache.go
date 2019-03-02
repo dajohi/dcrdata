@@ -53,7 +53,7 @@ func WatchPriorityQueue(bpq *BlockPriorityQueue) {
 // APICache maintains a fixed-capacity cache of CachedBlocks. Use NewAPICache to
 // create the cache with the desired capacity.
 type APICache struct {
-	sync.RWMutex
+	mtx             sync.RWMutex
 	isEnabled       atomic.Value
 	capacity        uint32
 	blockCache                               // map[chainhash.Hash]*CachedBlock
@@ -80,8 +80,8 @@ func NewAPICache(capacity uint32) *APICache {
 // SetLessFn sets the comparator used by the priority queue. For information on
 // the input function, see the docs for (pq *BlockPriorityQueue).SetLessFn.
 func (apic *APICache) SetLessFn(lessFn func(bi, bj *CachedBlock) bool) {
-	apic.Lock()
-	defer apic.Unlock()
+	apic.mtx.Lock()
+	defer apic.mtx.Unlock()
 	apic.expireQueue.SetLessFn(lessFn)
 }
 
@@ -102,8 +102,8 @@ func (apic *APICache) UtilizationBlocks() int64 { return int64(len(apic.blockCac
 
 // Utilization returns the percent utilization of the cache
 func (apic *APICache) Utilization() float64 {
-	apic.RLock()
-	defer apic.RUnlock()
+	apic.mtx.RLock()
+	defer apic.mtx.RUnlock()
 	return 100.0 * float64(len(apic.blockCache)) / float64(apic.capacity)
 }
 
@@ -127,8 +127,8 @@ func (apic *APICache) StoreBlockSummary(blockSummary *BlockDataBasic) error {
 		panic("that's not a real hash")
 	}
 
-	apic.Lock()
-	defer apic.Unlock()
+	apic.mtx.Lock()
+	defer apic.mtx.Unlock()
 
 	b, ok := apic.blockCache[*hash]
 	if ok && b.summary != nil {
@@ -186,8 +186,8 @@ func (apic *APICache) StoreStakeInfo(stakeInfo *StakeInfoExtended) error {
 		panic("that's not a real hash")
 	}
 
-	apic.Lock()
-	defer apic.Unlock()
+	apic.mtx.Lock()
+	defer apic.mtx.Unlock()
 
 	b, ok := apic.blockCache[*hash]
 	if ok {
@@ -238,16 +238,16 @@ func (apic *APICache) removeCachedBlock(cachedBlock *CachedBlock) {
 // RemoveCachedBlock removes the input CachedBlock the cache. If the block is
 // not in cache, this is essentially a silent no-op.
 func (apic *APICache) RemoveCachedBlock(cachedBlock *CachedBlock) {
-	apic.Lock()
-	defer apic.Unlock()
+	apic.mtx.Lock()
+	defer apic.mtx.Unlock()
 	apic.removeCachedBlock(cachedBlock)
 }
 
 // RemoveCachedBlockByHeight attempts to remove a CachedBlock with the given
 // height.
 func (apic *APICache) RemoveCachedBlockByHeight(height int64) {
-	apic.Lock()
-	defer apic.Unlock()
+	apic.mtx.Lock()
+	defer apic.mtx.Unlock()
 
 	hash, ok := apic.MainchainBlocks[height]
 	if !ok {
@@ -261,8 +261,8 @@ func (apic *APICache) RemoveCachedBlockByHeight(height int64) {
 // blockHash attempts to get the block hash for the main chain block at the
 // given height. The boolean indicates a cache miss.
 func (apic *APICache) blockHash(height int64) (chainhash.Hash, bool) {
-	apic.RLock()
-	defer apic.RUnlock()
+	apic.mtx.RLock()
+	defer apic.mtx.RUnlock()
 	hash, ok := apic.MainchainBlocks[height]
 	return hash, ok
 }
@@ -335,8 +335,8 @@ func (apic *APICache) GetStakeInfoByHash(hash string) *StakeInfoExtended {
 // GetCachedBlockByHeight attempts to fetch a CachedBlock with the given height.
 // The return is nil if no block with that height is cached.
 func (apic *APICache) GetCachedBlockByHeight(height int64) *CachedBlock {
-	apic.Lock()
-	defer apic.Unlock()
+	apic.mtx.Lock()
+	defer apic.mtx.Unlock()
 	hash, ok := apic.MainchainBlocks[height]
 	if !ok {
 		return nil
@@ -367,8 +367,8 @@ func (apic *APICache) GetCachedBlockByHashStr(hashStr string) *CachedBlock {
 		return nil
 	}
 
-	apic.Lock()
-	defer apic.Unlock()
+	apic.mtx.Lock()
+	defer apic.mtx.Unlock()
 	return apic.getCachedBlockByHash(*hash)
 }
 
@@ -381,8 +381,8 @@ func (apic *APICache) GetCachedBlockByHash(hash chainhash.Hash) *CachedBlock {
 		return nil
 	}
 
-	apic.Lock()
-	defer apic.Unlock()
+	apic.mtx.Lock()
+	defer apic.mtx.Unlock()
 	return apic.getCachedBlockByHash(hash)
 }
 
@@ -468,7 +468,7 @@ type blockHeap []*CachedBlock
 
 // BlockPriorityQueue implements heap.Interface and holds CachedBlocks
 type BlockPriorityQueue struct {
-	*sync.RWMutex
+	mtx                  *sync.RWMutex
 	bh                   blockHeap
 	capacity             uint32
 	needsReheap          bool
@@ -484,7 +484,7 @@ type BlockPriorityQueue struct {
 // by access count. Use BlockPriorityQueue.SetLessFn to redefine the comparator.
 func NewBlockPriorityQueue(capacity uint32) *BlockPriorityQueue {
 	pq := &BlockPriorityQueue{
-		RWMutex:    new(sync.RWMutex),
+		mtx:        new(sync.RWMutex),
 		bh:         blockHeap{},
 		capacity:   capacity,
 		minHeight:  math.MaxUint32,
@@ -520,8 +520,8 @@ func (pq BlockPriorityQueue) Swap(i, j int) {
 // *CachedBlock and return a bool, unlike Less, which accepts heap indexes i, j.
 // This allows to define a comparator without requiring a heap.
 func (pq *BlockPriorityQueue) SetLessFn(lessFn func(bi, bj *CachedBlock) bool) {
-	pq.Lock()
-	defer pq.Unlock()
+	pq.mtx.Lock()
+	defer pq.mtx.Unlock()
 	pq.lessFn = lessFn
 }
 
@@ -607,8 +607,8 @@ func (pq *BlockPriorityQueue) Pop() interface{} {
 // input slice is modifed, but not reordered. A fresh slice is created for PQ
 // internal use.
 func (pq *BlockPriorityQueue) ResetHeap(bh []*CachedBlock) {
-	pq.Lock()
-	defer pq.Unlock()
+	pq.mtx.Lock()
+	defer pq.mtx.Unlock()
 
 	pq.maxHeight = -1
 	pq.minHeight = math.MaxUint32
@@ -629,8 +629,8 @@ func (pq *BlockPriorityQueue) ResetHeap(bh []*CachedBlock) {
 
 // Reheap is a shortcut for heap.Init(pq)
 func (pq *BlockPriorityQueue) Reheap() {
-	pq.Lock()
-	defer pq.Unlock()
+	pq.mtx.Lock()
+	defer pq.mtx.Unlock()
 
 	pq.needsReheap = false
 	heap.Init(pq)
@@ -643,8 +643,8 @@ func (pq *BlockPriorityQueue) Reheap() {
 // else (not at capacity)
 // 		- heap.Push, which is pq.Push (append at bottom) then heapup
 func (pq *BlockPriorityQueue) Insert(summary *BlockDataBasic, stakeInfo *StakeInfoExtended) (bool, *chainhash.Hash, int64) {
-	pq.Lock()
-	defer pq.Unlock()
+	pq.mtx.Lock()
+	defer pq.mtx.Unlock()
 
 	if pq.capacity == 0 {
 		return false, nil, -1
@@ -747,26 +747,26 @@ func (pq *BlockPriorityQueue) UpdateBlock(b *CachedBlock, summary *BlockDataBasi
 }
 
 func (pq *BlockPriorityQueue) lastAccessTime() time.Time {
-	pq.RLock()
-	defer pq.RUnlock()
+	pq.mtx.RLock()
+	defer pq.mtx.RUnlock()
 	return pq.lastAccess
 }
 
 func (pq *BlockPriorityQueue) setAccessTime(t time.Time) {
-	pq.Lock()
-	defer pq.Unlock()
+	pq.mtx.Lock()
+	defer pq.mtx.Unlock()
 	pq.lastAccess = t
 }
 
 func (pq *BlockPriorityQueue) doesNeedReheap() bool {
-	pq.RLock()
-	defer pq.RUnlock()
+	pq.mtx.RLock()
+	defer pq.mtx.RUnlock()
 	return pq.needsReheap
 }
 
 func (pq *BlockPriorityQueue) setNeedsReheap(needReheap bool) {
-	pq.Lock()
-	defer pq.Unlock()
+	pq.mtx.Lock()
+	defer pq.mtx.Unlock()
 	pq.needsReheap = needReheap
 }
 
@@ -811,8 +811,8 @@ func (pq *BlockPriorityQueue) RescanMinMaxForUpdate(heightAdd, heightRemove uint
 // RemoveBlock removes the specified CachedBlock from the queue. Remember to
 // remove it from the actual block cache!
 func (pq *BlockPriorityQueue) RemoveBlock(b *CachedBlock) {
-	pq.Lock()
-	defer pq.Unlock()
+	pq.mtx.Lock()
+	defer pq.mtx.Unlock()
 
 	if b != nil && b.heapIdx > 0 && b.heapIdx < pq.Len() {
 		// only remove the block it it is really in the queue
