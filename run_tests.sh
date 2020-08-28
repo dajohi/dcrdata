@@ -58,6 +58,8 @@ for i in $(find . -name go.mod -type f -print); do
       --enable misspell \
       --enable unparam \
       --enable asciicheck \
+      --enable rowserrcheck \
+      --enable sqlclosecheck \
   )
 done
 
