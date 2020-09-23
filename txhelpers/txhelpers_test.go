@@ -1,6 +1,7 @@
 package txhelpers
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/binary"
 	"fmt"
@@ -12,10 +13,10 @@ import (
 	"testing"
 
 	"github.com/decred/dcrd/chaincfg/chainhash"
-	"github.com/decred/dcrd/chaincfg/v2"
-	"github.com/decred/dcrd/dcrutil/v2"
+	"github.com/decred/dcrd/chaincfg/v3"
+	"github.com/decred/dcrd/dcrutil/v3"
 	chainjson "github.com/decred/dcrd/rpc/jsonrpc/types/v2"
-	"github.com/decred/dcrd/rpcclient/v5"
+	"github.com/decred/dcrd/rpcclient/v6"
 	"github.com/decred/dcrd/wire"
 	"github.com/decred/dcrdata/semver"
 )
@@ -93,7 +94,7 @@ func LoadTestBlockAndSSTX(t *testing.T) (*dcrutil.Block, []*dcrutil.Tx) {
 func TestFeeRateInfoBlock(t *testing.T) {
 	block, _ := LoadTestBlockAndSSTX(t)
 
-	fib := FeeRateInfoBlock(block)
+	fib := FeeRateInfoBlock(block, false)
 	t.Log(*fib)
 
 	fibExpected := chainjson.FeeInfoBlock{
@@ -114,7 +115,7 @@ func TestFeeRateInfoBlock(t *testing.T) {
 func TestFeeInfoBlock(t *testing.T) {
 	block, _ := LoadTestBlockAndSSTX(t)
 
-	fib := FeeInfoBlock(block)
+	fib := FeeInfoBlock(block, false)
 	t.Log(*fib)
 
 	fibExpected := chainjson.FeeInfoBlock{
@@ -171,7 +172,7 @@ func ConnectNodeRPC(host, user, pass, cert string, disableTLS bool) (*rpcclient.
 	}
 
 	// Ensure the RPC server has a compatible API version.
-	ver, err := dcrdClient.Version()
+	ver, err := dcrdClient.Version(context.Background())
 	if err != nil {
 		return nil, nodeVer, fmt.Errorf("unable to get node RPC version")
 	}

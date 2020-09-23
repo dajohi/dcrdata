@@ -6,14 +6,14 @@ require (
 	github.com/caarlos0/env v3.5.0+incompatible
 	github.com/chappjc/logrus-prefix v0.0.0-20180227015900-3a1d64819adb
 	github.com/decred/dcrd/blockchain/standalone v1.1.0
-	github.com/decred/dcrd/chaincfg/chainhash v1.0.2
+	github.com/decred/dcrd/chaincfg/chainhash v1.0.3-0.20200921185235-6d75c7ec1199
 	github.com/decred/dcrd/chaincfg/v2 v2.3.0
-	github.com/decred/dcrd/dcrec v1.0.0
+	github.com/decred/dcrd/dcrec v1.0.1-0.20200921185235-6d75c7ec1199
 	github.com/decred/dcrd/dcrutil/v2 v2.0.1
-	github.com/decred/dcrd/rpc/jsonrpc/types/v2 v2.0.0
+	github.com/decred/dcrd/rpc/jsonrpc/types/v2 v2.0.1-0.20200921185235-6d75c7ec1199
 	github.com/decred/dcrd/rpcclient/v5 v5.0.0
 	github.com/decred/dcrd/txscript/v2 v2.1.0
-	github.com/decred/dcrd/wire v1.3.0
+	github.com/decred/dcrd/wire v1.3.1-0.20200921185235-6d75c7ec1199
 	github.com/decred/dcrdata/api/types/v5 v5.0.1
 	github.com/decred/dcrdata/blockdata/v5 v5.0.1
 	github.com/decred/dcrdata/db/cache/v3 v3.0.1
@@ -30,14 +30,14 @@ require (
 	github.com/decred/dcrdata/semver v1.0.0
 	github.com/decred/dcrdata/stakedb/v3 v3.1.1
 	github.com/decred/dcrdata/txhelpers/v4 v4.0.1
-	github.com/decred/slog v1.0.0
+	github.com/decred/slog v1.1.0
 	github.com/dmigwi/go-piparser/proposals v0.0.0-20191219171828-ae8cbf4067e1
 	github.com/dustin/go-humanize v1.0.0
 	github.com/go-chi/chi v4.1.0+incompatible
 	github.com/google/gops v0.3.7-0.20190802051910-59c8be2eaddf
 	github.com/googollee/go-engine.io v1.4.3-0.20190924125625-798118fc0dd2
 	github.com/googollee/go-socket.io v1.4.3-0.20191016204530-42fe90fa9ed0
-	github.com/jessevdk/go-flags v1.4.0
+	github.com/jessevdk/go-flags v1.4.1-0.20200711081900-c17162fe8fd7
 	github.com/jrick/logrotate v1.0.0
 	github.com/konsorten/go-windows-terminal-sequences v1.0.2 // indirect
 	github.com/mattn/go-colorable v0.1.1 // indirect
