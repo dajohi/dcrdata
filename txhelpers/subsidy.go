@@ -8,8 +8,8 @@ package txhelpers
 import (
 	"sync"
 
-	"github.com/decred/dcrd/blockchain/standalone"
-	"github.com/decred/dcrd/chaincfg/v2"
+	"github.com/decred/dcrd/blockchain/standalone/v2"
+	"github.com/decred/dcrd/chaincfg/v3"
 )
 
 // ultimateSubsidies stores ultimate subsidy values computed by UltimateSubsidy.
@@ -17,7 +17,7 @@ var ultimateSubsidies sync.Map
 
 // UltimateSubsidy computes the total subsidy over the entire subsidy
 // distribution period of the network.
-func UltimateSubsidy(params *chaincfg.Params) int64 {
+func UltimateSubsidy(params *chaincfg.Params, isTreasuryEnabled bool) int64 {
 	// Check previously computed ultimate subsidies.
 	result, ok := ultimateSubsidies.Load(params)
 	if ok {
@@ -32,7 +32,7 @@ func UltimateSubsidy(params *chaincfg.Params) int64 {
 	subsidySum := func(height int64) int64 {
 		work := subsidyCache.CalcWorkSubsidy(height, votesPerBlock)
 		vote := subsidyCache.CalcStakeVoteSubsidy(height) * int64(votesPerBlock)
-		treasury := subsidyCache.CalcTreasurySubsidy(height, votesPerBlock)
+		treasury := subsidyCache.CalcTreasurySubsidy(height, votesPerBlock, isTreasuryEnabled)
 		return work + vote + treasury
 	}
 
@@ -75,10 +75,10 @@ func UltimateSubsidy(params *chaincfg.Params) int64 {
 
 // RewardsAtBlock computes the PoW, PoS (per vote), and project fund subsidies
 // at for the specified block index, assuming a certain number of votes.
-func RewardsAtBlock(blockIdx int64, votes uint16, p *chaincfg.Params) (work, stake, tax int64) {
+func RewardsAtBlock(blockIdx int64, votes uint16, p *chaincfg.Params, isTreasuryEnabled bool) (work, stake, tax int64) {
 	subsidyCache := standalone.NewSubsidyCache(p)
 	work = subsidyCache.CalcWorkSubsidy(blockIdx, votes)
 	stake = subsidyCache.CalcStakeVoteSubsidy(blockIdx)
-	tax = subsidyCache.CalcTreasurySubsidy(blockIdx, votes)
+	tax = subsidyCache.CalcTreasurySubsidy(blockIdx, votes, isTreasuryEnabled)
 	return
 }

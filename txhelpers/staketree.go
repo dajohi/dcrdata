@@ -1,16 +1,17 @@
 package txhelpers
 
 import (
+	"context"
 	"fmt"
 	"os"
 
-	"github.com/decred/dcrd/blockchain/stake/v2"
+	"github.com/decred/dcrd/blockchain/stake/v3"
 	"github.com/decred/dcrd/chaincfg/chainhash"
-	"github.com/decred/dcrd/chaincfg/v2"
+	"github.com/decred/dcrd/chaincfg/v3"
 	"github.com/decred/dcrd/database/v2"
 	_ "github.com/decred/dcrd/database/v2/ffldb" // init the ffldb driver
-	"github.com/decred/dcrd/dcrutil/v2"
-	"github.com/decred/dcrd/rpcclient/v5"
+	"github.com/decred/dcrd/dcrutil/v3"
+	"github.com/decred/dcrd/rpcclient/v6"
 	"github.com/decred/dcrd/wire"
 )
 
@@ -25,8 +26,8 @@ const (
 // tree update with a single block or chunk of blocks.  This does NOT SCALE!
 
 // BuildStakeTree returns a database with a stake tree
-func BuildStakeTree(blocks map[int64]*dcrutil.Block, netParams *chaincfg.Params,
-	nodeClient *rpcclient.Client, poolRequiredHeight int64, DBName ...string) (database.DB, []int64, error) {
+func BuildStakeTree(ctx context.Context, blocks map[int64]*dcrutil.Block, netParams *chaincfg.Params,
+	isTreasuryEnabled bool, nodeClient *rpcclient.Client, poolRequiredHeight int64, DBName ...string) (database.DB, []int64, error) {
 
 	if blocks[0] == nil || blocks[0].Height() != 0 {
 		return nil, nil, fmt.Errorf("Must start at height 0")
@@ -82,7 +83,7 @@ func BuildStakeTree(blocks map[int64]*dcrutil.Block, netParams *chaincfg.Params,
 				for _, hash := range liveTickets {
 					val, ok := liveTicketMap[hash]
 					if !ok {
-						tx, err := nodeClient.GetRawTransaction(&hash)
+						tx, err := nodeClient.GetRawTransaction(ctx, &hash)
 						if err != nil {
 							fmt.Printf("Unable to get transaction %v: %v\n", hash, err)
 							continue
@@ -104,14 +105,14 @@ func BuildStakeTree(blocks map[int64]*dcrutil.Block, netParams *chaincfg.Params,
 			var ticketsToAdd []chainhash.Hash
 			if i >= netParams.StakeEnabledHeight {
 				matureHeight := (i - int64(netParams.TicketMaturity))
-				ticketsToAdd, _ = TicketsInBlock(blocks[matureHeight])
+				ticketsToAdd, _ = TicketsInBlock(blocks[matureHeight], isTreasuryEnabled)
 			}
 
-			spentTickets := TicketsSpentInBlock(block)
+			spentTickets := TicketsSpentInBlock(block, isTreasuryEnabled)
 			for i := range spentTickets {
 				delete(liveTicketMap, spentTickets[i])
 			}
-			revokedTickets := RevokedTicketsInBlock(block)
+			revokedTickets := RevokedTicketsInBlock(block, isTreasuryEnabled)
 			for i := range revokedTickets {
 				delete(liveTicketMap, revokedTickets[i])
 			}
@@ -144,11 +145,11 @@ func BuildStakeTree(blocks map[int64]*dcrutil.Block, netParams *chaincfg.Params,
 /// kang
 
 // TicketsInBlock finds all the new tickets in the block.
-func TicketsInBlock(bl *dcrutil.Block) ([]chainhash.Hash, []*wire.MsgTx) {
+func TicketsInBlock(bl *dcrutil.Block, isTreasuryEnabled bool) ([]chainhash.Hash, []*wire.MsgTx) {
 	tickets := make([]chainhash.Hash, 0)
 	ticketsMsgTx := make([]*wire.MsgTx, 0)
 	for _, stx := range bl.STransactions() {
-		if stake.DetermineTxType(stx.MsgTx()) == stake.TxTypeSStx {
+		if stake.DetermineTxType(stx.MsgTx(), isTreasuryEnabled) == stake.TxTypeSStx {
 			h := stx.Hash()
 			tickets = append(tickets, *h)
 			ticketsMsgTx = append(ticketsMsgTx, stx.MsgTx())
@@ -159,11 +160,11 @@ func TicketsInBlock(bl *dcrutil.Block) ([]chainhash.Hash, []*wire.MsgTx) {
 }
 
 // TicketTxnsInBlock finds all the new tickets in the block.
-func TicketTxnsInBlock(bl *dcrutil.Block) ([]chainhash.Hash, []*dcrutil.Tx) {
+func TicketTxnsInBlock(bl *dcrutil.Block, isTreasuryEnabled bool) ([]chainhash.Hash, []*dcrutil.Tx) {
 	tickets := make([]chainhash.Hash, 0)
 	ticketTxns := make([]*dcrutil.Tx, 0)
 	for _, stx := range bl.STransactions() {
-		if stake.DetermineTxType(stx.MsgTx()) == stake.TxTypeSStx {
+		if stake.DetermineTxType(stx.MsgTx(), isTreasuryEnabled) == stake.TxTypeSStx {
 			h := stx.Hash()
 			tickets = append(tickets, *h)
 			ticketTxns = append(ticketTxns, stx)
@@ -174,10 +175,10 @@ func TicketTxnsInBlock(bl *dcrutil.Block) ([]chainhash.Hash, []*dcrutil.Tx) {
 }
 
 // TicketsSpentInBlock finds all the tickets spent in the block.
-func TicketsSpentInBlock(bl *dcrutil.Block) []chainhash.Hash {
+func TicketsSpentInBlock(bl *dcrutil.Block, isTreasuryEnabled bool) []chainhash.Hash {
 	tickets := make([]chainhash.Hash, 0)
 	for _, stx := range bl.STransactions() {
-		if stake.DetermineTxType(stx.MsgTx()) == stake.TxTypeSSGen {
+		if stake.DetermineTxType(stx.MsgTx(), isTreasuryEnabled) == stake.TxTypeSSGen {
 			// Hash of the original STtx
 			tickets = append(tickets, stx.MsgTx().TxIn[1].PreviousOutPoint.Hash)
 		}
@@ -187,10 +188,10 @@ func TicketsSpentInBlock(bl *dcrutil.Block) []chainhash.Hash {
 }
 
 // VotesInBlock finds all the votes in the block.
-func VotesInBlock(bl *dcrutil.Block) []chainhash.Hash {
+func VotesInBlock(bl *dcrutil.Block, isTreasuryEnabled bool) []chainhash.Hash {
 	votes := make([]chainhash.Hash, 0)
 	for _, stx := range bl.STransactions() {
-		if stake.DetermineTxType(stx.MsgTx()) == stake.TxTypeSSGen {
+		if stake.DetermineTxType(stx.MsgTx(), isTreasuryEnabled) == stake.TxTypeSSGen {
 			h := stx.Hash()
 			votes = append(votes, *h)
 		}
@@ -200,10 +201,10 @@ func VotesInBlock(bl *dcrutil.Block) []chainhash.Hash {
 }
 
 // RevokedTicketsInBlock finds all the revoked tickets in the block.
-func RevokedTicketsInBlock(bl *dcrutil.Block) []chainhash.Hash {
+func RevokedTicketsInBlock(bl *dcrutil.Block, isTreasuryEnabled bool) []chainhash.Hash {
 	tickets := make([]chainhash.Hash, 0)
 	for _, stx := range bl.STransactions() {
-		if stake.DetermineTxType(stx.MsgTx()) == stake.TxTypeSSRtx {
+		if stake.DetermineTxType(stx.MsgTx(), isTreasuryEnabled) == stake.TxTypeSSRtx {
 			tickets = append(tickets, stx.MsgTx().TxIn[0].PreviousOutPoint.Hash)
 		}
 	}
