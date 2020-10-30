@@ -9,7 +9,7 @@ import (
 	"sync"
 
 	"github.com/decred/dcrd/blockchain/standalone"
-	"github.com/decred/dcrd/chaincfg/v2"
+	"github.com/decred/dcrd/chaincfg/v3"
 )
 
 // ultimateSubsidies stores ultimate subsidy values computed by UltimateSubsidy.

@@ -9,7 +9,7 @@ import (
 
 	"testing"
 
-	"github.com/decred/dcrd/chaincfg/v2"
+	"github.com/decred/dcrd/chaincfg/v3"
 )
 
 func TestTestNet3Name(t *testing.T) {

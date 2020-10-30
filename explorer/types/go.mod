@@ -3,10 +3,10 @@ module github.com/decred/dcrdata/explorer/types/v2
 go 1.12
 
 require (
-	github.com/decred/dcrd/chaincfg/v2 v2.3.0
+	github.com/decred/dcrd/chaincfg/v3 v3.0.0
 	github.com/decred/dcrd/dcrutil/v2 v2.0.1
 	github.com/decred/dcrd/rpc/jsonrpc/types/v2 v2.0.0
-	github.com/decred/dcrd/wire v1.3.0
+	github.com/decred/dcrd/wire v1.4.0
 	github.com/decred/dcrdata/exchanges/v2 v2.1.0
 	github.com/decred/dcrdata/txhelpers/v4 v4.0.1
 	github.com/dustin/go-humanize v1.0.0
