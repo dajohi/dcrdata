@@ -6,7 +6,7 @@ require (
 	github.com/decred/dcrd/blockchain/stake/v2 v2.0.2
 	github.com/decred/dcrd/blockchain/standalone v1.1.0
 	github.com/decred/dcrd/chaincfg/chainhash v1.0.2
-	github.com/decred/dcrd/chaincfg/v2 v2.3.0
+	github.com/decred/dcrd/chaincfg/v3 v3.0.0
 	github.com/decred/dcrd/dcrutil/v2 v2.0.1
 	github.com/decred/dcrd/rpc/jsonrpc/types/v2 v2.0.0
 	github.com/decred/dcrd/rpcclient/v5 v5.0.0
@@ -20,4 +20,9 @@ require (
 	github.com/dustin/go-humanize v1.0.0
 )
 
-replace github.com/decred/dcrdata/explorer/types/v2 => ../explorer/types
+replace (
+	github.com/decred/dcrdata/db/dbtypes/v2 => ../db/dbtypes
+	github.com/decred/dcrdata/explorer/types/v2 => ../explorer/types
+	github.com/decred/dcrdata/rpcutils/v3 => ../rpcutils
+	github.com/decred/dcrdata/txhelpers/v4 => ../txhelpers
+)

@@ -3,10 +3,12 @@ module github.com/decred/dcrdata/db/dcrpg/v5
 go 1.12
 
 replace (
+	github.com/decred/dcrdata/blockdata/v5 => ../../blockdata
 	github.com/decred/dcrdata/db/cache/v3 => ../cache
 	github.com/decred/dcrdata/db/dbtypes/v2 => ../dbtypes
 	github.com/decred/dcrdata/explorer/types/v2 => ../../explorer/types
 	github.com/decred/dcrdata/mempool/v5 => ../../mempool
+	github.com/decred/dcrdata/rpcutils/v3 => ../../rpcutils
 	github.com/decred/dcrdata/txhelpers/v4 => ../../txhelpers
 )
 
@@ -15,12 +17,12 @@ require (
 	github.com/davecgh/go-spew v1.1.1
 	github.com/decred/dcrd/blockchain/stake/v2 v2.0.2
 	github.com/decred/dcrd/chaincfg/chainhash v1.0.2
-	github.com/decred/dcrd/chaincfg/v2 v2.3.0
+	github.com/decred/dcrd/chaincfg/v3 v3.0.0
 	github.com/decred/dcrd/dcrutil/v2 v2.0.1
 	github.com/decred/dcrd/rpc/jsonrpc/types/v2 v2.0.0
 	github.com/decred/dcrd/rpcclient/v5 v5.0.0
 	github.com/decred/dcrd/txscript/v2 v2.1.0
-	github.com/decred/dcrd/wire v1.3.0
+	github.com/decred/dcrd/wire v1.4.0
 	github.com/decred/dcrdata/api/types/v5 v5.0.1
 	github.com/decred/dcrdata/blockdata/v5 v5.0.1
 	github.com/decred/dcrdata/db/cache/v3 v3.0.1

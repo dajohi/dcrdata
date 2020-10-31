@@ -7,7 +7,7 @@ package txhelpers
 import (
 	"testing"
 
-	"github.com/decred/dcrd/chaincfg/v2"
+	"github.com/decred/dcrd/chaincfg/v3"
 )
 
 func TestUltimateSubsidy(t *testing.T) {

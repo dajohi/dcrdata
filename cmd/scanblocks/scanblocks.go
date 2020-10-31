@@ -9,7 +9,7 @@ import (
 	"strconv"
 
 	"github.com/decred/dcrd/blockchain/standalone"
-	"github.com/decred/dcrd/chaincfg/v2"
+	"github.com/decred/dcrd/chaincfg/v3"
 	"github.com/decred/dcrd/dcrutil/v2"
 	"github.com/decred/dcrd/rpcclient/v5"
 	apitypes "github.com/decred/dcrdata/api/types/v5"
