@@ -34,9 +34,7 @@ const prettyDurations = {
 const exchangeLinks = {
   CurrencyPairDCRBTC: {
     binance: 'https://www.binance.com/en/trade/DCR_BTC',
-    bittrex: 'https://bittrex.com/Market/Index?MarketName=BTC-DCR',
     poloniex: 'https://poloniex.com/exchange#btc_dcr',
-    dragonex: 'https://dragonex.io/en-us/trade/index/dcr_btc',
     huobi: 'https://www.hbg.com/en-us/exchange/?s=dcr_btc',
     dcrdex: 'https://dex.decred.org'
   },
@@ -477,7 +475,7 @@ function calcStickWindow (start, end, bin) {
 
 function isValidExchange (xc) {
   return xc === 'binance' || xc === 'dcrdex' || xc === 'poloniex' ||
-  xc === 'bittrex' || xc === 'huobi' || xc === 'dragonex' || xc === 'mexc'
+  xc === 'huobi' || xc === 'mexc'
 }
 
 export default class extends Controller {

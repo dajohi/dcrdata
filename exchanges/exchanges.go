@@ -28,9 +28,7 @@ import (
 // Tokens. Used to identify the exchange.
 const (
 	Coinbase     = "coinbase"
-	Coindesk     = "coindesk"
 	Binance      = "binance"
-	DragonEx     = "dragonex"
 	Huobi        = "huobi"
 	Poloniex     = "poloniex"
 	DexDotDecred = "dcrdex"
@@ -129,12 +127,6 @@ var (
 			USDTIndex: "https://api.coinbase.com/v2/exchange-rates?currency=USDT",
 		},
 	}
-	CoindeskURLs = URLs{
-		Markets: []CurrencyPair{BTCIndex},
-		Price: map[CurrencyPair]string{
-			BTCIndex: "https://api.coindesk.com/v2/bpi/currentprice.json",
-		},
-	}
 	// https://api.mexc.com/api/v3/depth?symbol=DCRUSDT
 	MexcURLs = URLs{
 		Markets: []CurrencyPair{CurrencyPairDCRUSDT},
@@ -180,42 +172,6 @@ var (
 			},
 		},
 	}
-	BittrexURLs = URLs{
-		Markets: []CurrencyPair{CurrencyPairDCRBTC},
-		Price: map[CurrencyPair]string{
-			CurrencyPairDCRBTC: "https://api.bittrex.com/v3/markets/dcr-btc/ticker",
-		},
-		Stats: map[CurrencyPair]string{
-			CurrencyPairDCRBTC: "https://api.bittrex.com/v3/markets/dcr-btc/summary",
-		},
-		Depth: map[CurrencyPair]string{
-			CurrencyPairDCRBTC: "https://api.bittrex.com/v3/markets/dcr-btc/orderbook?depth=500",
-		},
-		Candlesticks: map[CurrencyPair]map[candlestickKey]string{
-			CurrencyPairDCRBTC: {
-				hourKey: "https://api.bittrex.com/v3/markets/dcr-btc/candles/HOUR_1/recent",
-				dayKey:  "https://api.bittrex.com/v3/markets/dcr-btc/candles/DAY_1/recent",
-			}},
-		// Bittrex uses SignalR, which retrieves the actual websocket endpoint via
-		// HTTP.
-		Websocket: "socket.bittrex.com",
-	}
-	DragonExURLs = URLs{
-		Markets: []CurrencyPair{CurrencyPairDCRBTC},
-		Price: map[CurrencyPair]string{
-			CurrencyPairDCRBTC: "https://openapi.dragonex.io/api/v1/market/real/?symbol_id=1520101",
-		},
-		// DragonEx depth chart has no parameters for configuring amount of data.
-		Depth: map[CurrencyPair]string{
-			CurrencyPairDCRBTC: "https://openapi.dragonex.io/api/v1/market/%s/?symbol_id=1520101", // Separate buy and sell endpoints
-		},
-		Candlesticks: map[CurrencyPair]map[candlestickKey]string{
-			CurrencyPairDCRBTC: {
-				hourKey: "https://openapi.dragonex.io/api/v1/market/kline/?symbol_id=1520101&count=100&kline_type=5",
-				dayKey:  "https://openapi.dragonex.io/api/v1/market/kline/?symbol_id=1520101&count=100&kline_type=6",
-			},
-		},
-	}
 	HuobiURLs = URLs{
 		Markets: []CurrencyPair{CurrencyPairDCRBTC},
 		Price: map[CurrencyPair]string{
@@ -256,13 +212,11 @@ var (
 // Indices maps tokens to constructors for {BTC, USDT}-fiat exchanges.
 var Indices = map[string]func(*http.Client, *BotChannels) (Exchange, error){
 	Coinbase: NewCoinbase,
-	Coindesk: NewCoindesk,
 }
 
 // DcrExchanges maps tokens to constructors for DCR-{Asset} exchanges.
 var DcrExchanges = map[string]func(*http.Client, *BotChannels) (Exchange, error){
 	Binance:  NewBinance,
-	DragonEx: NewDragonEx,
 	Huobi:    NewHuobi,
 	Poloniex: NewPoloniex,
 	DexDotDecred: NewDecredDEXConstructor(&DEXConfig{
@@ -992,75 +946,6 @@ func (coinbase *CoinbaseExchange) refresh(mkt CurrencyPair, requests *requests) 
 	coinbase.UpdateIndices(mkt, indices)
 }
 
-// CoindeskExchange provides {Bitcoin, USDT} indices for USD, GBP, and EUR by
-// default. Others are available, but custom requests would need to be
-// implemented.
-type CoindeskExchange struct {
-	*CommonExchange
-}
-
-// NewCoindesk constructs a CoindeskExchange.
-func NewCoindesk(client *http.Client, channels *BotChannels) (coindesk Exchange, err error) {
-	reqs := newRequests(CoindeskURLs.Markets)
-	for index, price := range CoindeskURLs.Price {
-		reqs[index].price, err = http.NewRequest(http.MethodGet, price, nil)
-		if err != nil {
-			return
-		}
-	}
-	coindesk = &CoindeskExchange{
-		CommonExchange: newCommonExchange(Coindesk, client, reqs, channels),
-	}
-	return
-}
-
-// CoindeskResponse models the JSON data returned from the Coindesk API.
-type CoindeskResponse struct {
-	Time       CoindeskResponseTime           `json:"time"`
-	Disclaimer string                         `json:"disclaimer"`
-	ChartName  string                         `json:"chartName"`
-	Bpi        map[string]CoindeskResponseBpi `json:"bpi"`
-}
-
-// CoindeskResponseTime models the "time" field of the Coindesk API response.
-type CoindeskResponseTime struct {
-	Updated    string    `json:"updated"`
-	UpdatedIso time.Time `json:"updatedISO"`
-	Updateduk  string    `json:"updateduk"`
-}
-
-// CoindeskResponseBpi models the "bpi" field of the Coindesk API response.
-type CoindeskResponseBpi struct {
-	Code        string  `json:"code"`
-	Symbol      string  `json:"symbol"`
-	Rate        string  `json:"rate"`
-	Description string  `json:"description"`
-	RateFloat   float64 `json:"rate_float"`
-}
-
-// Refresh retrieves and parses API data from Coindesk.
-func (coindesk *CoindeskExchange) Refresh() {
-	coindesk.LogRequest()
-	for index, requests := range coindesk.requests {
-		coindesk.refresh(index, requests)
-	}
-}
-
-func (coindesk *CoindeskExchange) refresh(index CurrencyPair, requests *requests) {
-	response := new(CoindeskResponse)
-	err := coindesk.fetch(requests.price, response)
-	if err != nil {
-		coindesk.fail("Fetch", err)
-		return
-	}
-
-	indices := make(FiatIndices)
-	for code, bpi := range response.Bpi {
-		indices[code] = bpi.RateFloat
-	}
-	coindesk.UpdateIndices(index, indices)
-}
-
 // BinanceExchange is a high-volume and well-respected crypto exchange.
 type BinanceExchange struct {
 	*CommonExchange
@@ -1341,384 +1226,6 @@ func (binance *BinanceExchange) refresh(mkt CurrencyPair, requests *requests) {
 	})
 }
 
-// DragonExchange is a Singapore-based crytocurrency exchange.
-type DragonExchange struct {
-	*CommonExchange
-	SymbolID         int
-	depthBuyRequest  map[CurrencyPair]*http.Request
-	depthSellRequest map[CurrencyPair]*http.Request
-}
-
-// NewDragonEx constructs a DragonExchange.
-func NewDragonEx(client *http.Client, channels *BotChannels) (dragonex Exchange, err error) {
-	reqs := newRequests(DragonExURLs.Markets)
-	for mkt, price := range DragonExURLs.Price {
-		reqs[mkt].price, err = http.NewRequest(http.MethodGet, price, nil)
-		if err != nil {
-			return
-		}
-	}
-
-	depthBuyMap := make(map[CurrencyPair]*http.Request, len(reqs))
-	depthSellMap := make(map[CurrencyPair]*http.Request, len(reqs))
-	for mkt, depth := range DragonExURLs.Depth {
-		// Dragonex has separate endpoints for buy and sell, so the requests are
-		// stored as fields of DragonExchange
-		var depthSell, depthBuy *http.Request
-		depthSell, err = http.NewRequest(http.MethodGet, fmt.Sprintf(depth, "sell"), nil)
-		if err != nil {
-			return
-		}
-
-		depthBuy, err = http.NewRequest(http.MethodGet, fmt.Sprintf(depth, "buy"), nil)
-		if err != nil {
-			return
-		}
-
-		depthBuyMap[mkt] = depthBuy
-		depthSellMap[mkt] = depthSell
-	}
-
-	for mkt, candlesticks := range DragonExURLs.Candlesticks {
-		for dur, url := range candlesticks {
-			reqs[mkt].candlesticks[dur], err = http.NewRequest(http.MethodGet, url, nil)
-			if err != nil {
-				return
-			}
-		}
-	}
-
-	dragonex = &DragonExchange{
-		CommonExchange:   newCommonExchange(DragonEx, client, reqs, channels),
-		SymbolID:         1520101,
-		depthBuyRequest:  depthBuyMap,
-		depthSellRequest: depthSellMap,
-	}
-	return
-}
-
-// DragonExResponse models the generic fields returned in every response.
-type DragonExResponse struct {
-	Ok   bool   `json:"ok"`
-	Code int    `json:"code"`
-	Msg  string `json:"msg"`
-}
-
-// DragonExPriceResponse models the JSON data returned from the DragonEx API.
-type DragonExPriceResponse struct {
-	DragonExResponse
-	Data []DragonExPriceResponseData `json:"data"`
-}
-
-// DragonExPriceResponseData models the JSON data from the DragonEx API.
-// Dragonex has the current price in close_price
-type DragonExPriceResponseData struct {
-	ClosePrice      string `json:"close_price"`
-	CurrentVolume   string `json:"current_volume"`
-	MaxPrice        string `json:"max_price"`
-	MinPrice        string `json:"min_price"`
-	OpenPrice       string `json:"open_price"`
-	PriceBase       string `json:"price_base"`
-	PriceChange     string `json:"price_change"`
-	PriceChangeRate string `json:"price_change_rate"`
-	Timestamp       int64  `json:"timestamp"`
-	TotalAmount     string `json:"total_amount"`
-	TotalVolume     string `json:"total_volume"`
-	UsdtVolume      string `json:"usdt_amount"`
-	SymbolID        int    `json:"symbol_id"`
-}
-
-// DragonExDepthPt models a single point of data in a Dragon Exchange depth
-// chart data set.
-type DragonExDepthPt struct {
-	Price  string `json:"price"`
-	Volume string `json:"volume"`
-}
-
-// DragonExDepthArray is a slice of DragonExDepthPt.
-type DragonExDepthArray []DragonExDepthPt
-
-func (pts DragonExDepthArray) translate() []DepthPoint {
-	outPts := make([]DepthPoint, 0, len(pts))
-	for _, pt := range pts {
-		price, err := strconv.ParseFloat(pt.Price, 64)
-		if err != nil {
-			log.Errorf("DragonExDepthArray.translate failed to parse float from %s", pt.Price)
-			return []DepthPoint{}
-		}
-
-		volume, err := strconv.ParseFloat(pt.Volume, 64)
-		if err != nil {
-			log.Errorf("DragonExDepthArray.translate failed to parse volume from %s", pt.Volume)
-			return []DepthPoint{}
-		}
-		outPts = append(outPts, DepthPoint{
-			Quantity: volume,
-			Price:    price,
-		})
-	}
-	return outPts
-}
-
-// DragonExDepthResponse models the Dragon Exchange depth chart data response.
-type DragonExDepthResponse struct {
-	DragonExResponse
-	Data DragonExDepthArray `json:"data"`
-}
-
-// DragonExCandlestickColumns models the column list returned in a candlestick
-// chart data response from Dragon Exchange.
-type DragonExCandlestickColumns []string
-
-func (keys DragonExCandlestickColumns) index(dxKey string) (int, error) {
-	for idx, key := range keys {
-		if key == dxKey {
-			return idx, nil
-		}
-	}
-	return -1, fmt.Errorf("Unable to locate DragonEx candlestick key %s", dxKey)
-}
-
-const (
-	dxHighKey   = "max_price"
-	dxLowKey    = "min_price"
-	dxOpenKey   = "open_price"
-	dxCloseKey  = "close_price"
-	dxVolumeKey = "volume"
-	dxTimeKey   = "timestamp"
-)
-
-// DragonExCandlestickList models the value list returned in a candlestick
-// chart data response from Dragon Exchange.
-type DragonExCandlestickList []interface{}
-
-func (list DragonExCandlestickList) getFloat(idx int) (float64, error) {
-	if len(list) < idx+1 {
-		return -1, fmt.Errorf("DragonEx candlestick point index %d out of range", idx)
-	}
-	valStr, ok := list[idx].(string)
-	if !ok {
-		return -1, fmt.Errorf("DragonEx.getFloat found unexpected type at index %d", idx)
-	}
-	val, err := strconv.ParseFloat(valStr, 64)
-	if err != nil {
-		return -1, fmt.Errorf("DragonEx candlestick parseFloat error: %v", err)
-	}
-	return val, nil
-}
-
-// DragonExCandlestickPts is a list of DragonExCandlestickList.
-type DragonExCandlestickPts []DragonExCandlestickList
-
-// DragonExCandlestickData models the Data field of DragonExCandlestickResponse.
-type DragonExCandlestickData struct {
-	Columns DragonExCandlestickColumns `json:"columns"`
-	Lists   DragonExCandlestickPts     `json:"lists"`
-}
-
-func badDragonexStickElement(key string, err error) Candlesticks {
-	log.Errorf("Unable to decode %s from Binance candlestick: %v", key, err)
-	return Candlesticks{}
-}
-
-func (data DragonExCandlestickData) translate( /*cKey candlestickKey*/ ) Candlesticks {
-	sticks := make(Candlesticks, 0, len(data.Lists))
-	var idx int
-	var err error
-	for _, pt := range data.Lists {
-		idx, err = data.Columns.index(dxHighKey)
-		if err != nil {
-			return badDragonexStickElement(dxHighKey, err)
-		}
-		high, err := pt.getFloat(idx)
-		if err != nil {
-			return badDragonexStickElement(dxHighKey, err)
-		}
-
-		idx, err = data.Columns.index(dxLowKey)
-		if err != nil {
-			return badDragonexStickElement(dxLowKey, err)
-		}
-		low, err := pt.getFloat(idx)
-		if err != nil {
-			return badDragonexStickElement(dxLowKey, err)
-		}
-
-		idx, err = data.Columns.index(dxOpenKey)
-		if err != nil {
-			return badDragonexStickElement(dxOpenKey, err)
-		}
-		open, err := pt.getFloat(idx)
-		if err != nil {
-			return badDragonexStickElement(dxOpenKey, err)
-		}
-
-		idx, err = data.Columns.index(dxCloseKey)
-		if err != nil {
-			return badDragonexStickElement(dxCloseKey, err)
-		}
-		close, err := pt.getFloat(idx)
-		if err != nil {
-			return badDragonexStickElement(dxCloseKey, err)
-		}
-
-		idx, err = data.Columns.index(dxVolumeKey)
-		if err != nil {
-			return badDragonexStickElement(dxVolumeKey, err)
-		}
-		volume, err := pt.getFloat(idx)
-		if err != nil {
-			return badDragonexStickElement(dxVolumeKey, err)
-		}
-
-		idx, err = data.Columns.index(dxTimeKey)
-		if err != nil {
-			return badDragonexStickElement(dxTimeKey, err)
-		}
-		if len(pt) < idx+1 {
-			return badDragonexStickElement(dxTimeKey, fmt.Errorf("DragonEx time index %d out of range", idx))
-		}
-		unixFloat, ok := pt[idx].(float64)
-		if !ok {
-			return badDragonexStickElement(dxTimeKey, fmt.Errorf("DragonEx found unexpected type for time at index %d", idx))
-		}
-		startTime := time.Unix(int64(unixFloat), 0)
-
-		sticks = append(sticks, Candlestick{
-			High:   high,
-			Low:    low,
-			Open:   open,
-			Close:  close,
-			Volume: volume,
-			Start:  startTime,
-		})
-	}
-	return sticks
-}
-
-// DragonExCandlestickResponse models the response from DragonEx for the
-// historical k-line data.
-type DragonExCandlestickResponse struct {
-	DragonExResponse
-	Data DragonExCandlestickData
-}
-
-func (dragonex *DragonExchange) getDragonExDepthData(req *http.Request, response *DragonExDepthResponse) error {
-	err := dragonex.fetch(req, response)
-	if err != nil {
-		return fmt.Errorf("DragonEx buy order book response error: %v", err)
-	}
-	if !response.Ok {
-		return fmt.Errorf("DragonEx depth response server error with message: %s", response.Msg)
-	}
-	return nil
-}
-
-// Refresh retrieves and parses API data from DragonEx.
-func (dragonex *DragonExchange) Refresh() {
-	dragonex.LogRequest()
-	for mkt, req := range dragonex.requests {
-		dragonex.refresh(mkt, req)
-	}
-}
-
-func (dragonex *DragonExchange) refresh(mkt CurrencyPair, requests *requests) {
-	response := new(DragonExPriceResponse)
-	err := dragonex.fetch(requests.price, response)
-	if err != nil {
-		dragonex.fail(fmt.Sprintf("%s: Fetch", mkt), err)
-		return
-	}
-	if !response.Ok {
-		dragonex.fail(fmt.Sprintf("%s: Response not ok", mkt), err)
-		return
-	}
-	if len(response.Data) == 0 {
-		dragonex.fail(fmt.Sprintf("%s: No data", mkt), fmt.Errorf("Response data array is empty"))
-		return
-	}
-	data := response.Data[0]
-	if data.SymbolID != dragonex.SymbolID {
-		dragonex.fail(fmt.Sprintf("%s: Wrong code", mkt), fmt.Errorf("Pair id %d in response is not the expected id %d", data.SymbolID, dragonex.SymbolID))
-		return
-	}
-	price, err := strconv.ParseFloat(data.ClosePrice, 64)
-	if err != nil {
-		dragonex.fail(fmt.Sprintf("%s: Failed to parse float from ClosePrice=%s", mkt, data.ClosePrice), err)
-		return
-	}
-	volume, err := strconv.ParseFloat(data.TotalVolume, 64)
-	if err != nil {
-		dragonex.fail(fmt.Sprintf("%s: Failed to parse float from TotalVolume=%s", mkt, data.TotalVolume), err)
-		return
-	}
-	btcVolume := volume * price
-	priceChange, err := strconv.ParseFloat(data.PriceChange, 64)
-	if err != nil {
-		dragonex.fail(fmt.Sprintf("%s: Failed to parse float from PriceChange=%s", mkt, data.PriceChange), err)
-		return
-	}
-
-	// Depth chart
-	depthSellResponse := new(DragonExDepthResponse)
-	sellErr := dragonex.getDragonExDepthData(dragonex.depthSellRequest[mkt], depthSellResponse)
-	if sellErr != nil {
-		log.Errorf("%s: DragonEx sell order book response error: %v", mkt, sellErr)
-	}
-
-	depthBuyResponse := new(DragonExDepthResponse)
-	buyErr := dragonex.getDragonExDepthData(dragonex.depthBuyRequest[mkt], depthBuyResponse)
-	if buyErr != nil {
-		log.Errorf("%s: DragonEx buy order book response error: %v", mkt, buyErr)
-	}
-
-	var depth *DepthData
-	if sellErr == nil && buyErr == nil {
-		depth = &DepthData{
-			Time: time.Now().Unix(),
-			Bids: depthBuyResponse.Data.translate(),
-			Asks: depthSellResponse.Data.translate(),
-		}
-	}
-
-	// Grab the current state to check if candlesticks need updating
-	state := dragonex.state(mkt)
-
-	candlesticks := map[candlestickKey]Candlesticks{}
-	for bin, req := range requests.candlesticks {
-		oldSticks, found := state.Candlesticks[bin]
-		if !found || oldSticks.needsUpdate(bin) {
-			log.Tracef("Signalling candlestick update for %s, bin size %s", dragonex.token, bin)
-			response := new(DragonExCandlestickResponse)
-			err := dragonex.fetch(req, response)
-			if err != nil {
-				log.Errorf("Error retrieving candlestick data from dragonex for bin size %s: %v", string(bin), err)
-				continue
-			}
-			if !response.Ok {
-				log.Errorf("DragonEx server error while fetching candlestick data. Message: %s", response.Msg)
-			}
-
-			sticks := response.Data.translate()
-			if !found || sticks.time().After(oldSticks.time()) {
-				candlesticks[bin] = sticks
-			}
-		}
-	}
-
-	dragonex.Update(mkt, &ExchangeState{
-		BaseState: BaseState{
-			Price:      price,
-			BaseVolume: btcVolume,
-			Volume:     volume,
-			Change:     priceChange,
-			Stamp:      data.Timestamp,
-		},
-		Depth:        depth,
-		Candlesticks: candlesticks,
-	})
-}
-
 // HuobiExchange is based in Hong Kong and Singapore.
 type HuobiExchange struct {
 	*CommonExchange
@@ -1762,7 +1269,7 @@ func NewHuobi(client *http.Client, channels *BotChannels) (huobi Exchange, err e
 	}, nil
 }
 
-// HuobiResponse models the common response fields in all API BittrexResponseResult
+// HuobiResponse models the common response fields in all API HuobiResponseResult
 type HuobiResponse struct {
 	Status string `json:"status"`
 	Ch     string `json:"ch"`
@@ -2507,9 +2014,9 @@ func (poloniex *PoloniexExchange) Refresh() {
 
 	if !wsStarting {
 		sinceLast := time.Since(poloniex.wsLastUpdate())
-		log.Tracef("last bittrex websocket update %.3f seconds ago", sinceLast.Seconds())
+		log.Tracef("last poloniex websocket update %.3f seconds ago", sinceLast.Seconds())
 		if sinceLast > depthDataExpiration && !poloniex.wsFailed() {
-			poloniex.setWsFail(fmt.Errorf("lost connection detected. bittrex websocket will reconnect during next refresh"))
+			poloniex.setWsFail(fmt.Errorf("lost connection detected. poloniex websocket will reconnect during next refresh"))
 		}
 	}
 

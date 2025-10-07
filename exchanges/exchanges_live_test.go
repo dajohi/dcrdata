@@ -229,58 +229,6 @@ func TestPoloniexLiveWebsocket(t *testing.T) {
 	checkWsDepths(t, poloniex.wsDepths())
 	poloniex.ws.Close()
 }
-func TestBittrexLiveWebsocket(t *testing.T) {
-	enableTestLog()
-	// Skip this test during automated testing.
-	if os.Getenv("GORACE") != "" {
-		t.Skip("Skipping Bittrex websocket test")
-	}
-
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	killSwitch := makeKillSwitch()
-	go func() {
-		select {
-		case <-killSwitch:
-			cancel()
-			return
-		case <-ctx.Done():
-			return
-		}
-	}()
-
-	chans := &BotChannels{
-		index:    make(chan *IndexUpdate),
-		exchange: make(chan *ExchangeUpdate, 1),
-		done:     make(chan struct{}),
-	}
-
-	xc, err := NewBittrex(new(http.Client), chans)
-	if err != nil {
-		t.Fatalf("NewBittrex error: %v", err)
-	}
-
-	bittrex := xc.(*BittrexExchange)
-
-	ticker := time.NewTicker(time.Second * 10)
-	testTimeout := time.NewTimer(time.Minute * 2)
-	bittrex.Refresh()
-	for {
-		select {
-		case <-ticker.C:
-			bittrex.Refresh()
-		case <-testTimeout.C:
-			cancel()
-			return
-		case xcUpdate := <-chans.exchange:
-			fmt.Printf("Bittrex emitted an exchange update: %d bids, %d asks, %d candlestick sets \n",
-				len(xcUpdate.State.Depth.Bids), len(xcUpdate.State.Depth.Asks), len(xcUpdate.State.Candlesticks))
-		case <-ctx.Done():
-			return
-		}
-	}
-}
 
 func TestDecredDEXLive(t *testing.T) {
 	enableTestLog()
