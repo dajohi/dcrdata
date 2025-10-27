@@ -7,6 +7,7 @@
 package explorer
 
 import (
+	"context"
 	"fmt"
 	"math"
 	"net/http"
@@ -100,7 +101,7 @@ type explorerDataSource interface {
 	GetExplorerBlocks(start int, end int) []*types.BlockBasic
 	GetBlockHeight(hash string) (int64, error)
 	GetBlockHash(idx int64) (string, error)
-	GetExplorerTx(txid string) *types.TxInfo
+	GetExplorerTx(ctx context.Context, txid string) *types.TxInfo
 	GetTip() (*types.WebBasicBlock, error)
 	DecodeRawTransaction(txhex string) (*chainjson.TxRawResult, error)
 	SendRawTransaction(txhex string) (string, error)

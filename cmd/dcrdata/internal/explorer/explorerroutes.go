@@ -845,7 +845,7 @@ func (exp *explorerUI) TxPage(w http.ResponseWriter, r *http.Request) {
 	ioid, _ := r.Context().Value(ctxTxInOutId).(string)
 	inoutid, _ := strconv.ParseInt(ioid, 10, 0)
 
-	tx := exp.dataSource.GetExplorerTx(hash)
+	tx := exp.dataSource.GetExplorerTx(r.Context(), hash)
 	// If dcrd has no information about the transaction, pull the transaction
 	// details from the auxiliary DB database. Several pieces of information may
 	// be missing, namely the pkScripts and various information, including the

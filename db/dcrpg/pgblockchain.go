@@ -6132,11 +6132,11 @@ func (pgb *ChainDB) GetExplorerBlocks(start int, end int) []*exptypes.BlockBasic
 // transaction is unconfirmed, getstakedifficulty, while the chain server's best
 // block remains unchanged. If the transaction is confirmed, the ticket price is
 // queryied from ChainDB's database. This is an ugly solution to atomic RPCs.
-func (pgb *ChainDB) txWithTicketPrice(txhash *chainhash.Hash) (*chainjson.TxRawResult, int64, error) {
+func (pgb *ChainDB) txWithTicketPrice(ctx context.Context, txhash *chainhash.Hash) (*chainjson.TxRawResult, int64, error) {
 	// If the transaction is unconfirmed, the RPC client must provide the ticket
 	// price. Ensure the best block does not change between calls to
 	// getrawtransaction and getstakedifficulty.
-	ctx, cancel := context.WithTimeout(pgb.ctx, 10*time.Second)
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 	blockHash, _, err := pgb.Client.GetBestBlock(ctx)
 	if err != nil {
@@ -6179,14 +6179,14 @@ func (pgb *ChainDB) txWithTicketPrice(txhash *chainhash.Hash) (*chainjson.TxRawR
 
 // GetExplorerTx creates a *exptypes.TxInfo for the transaction with the given
 // ID.
-func (pgb *ChainDB) GetExplorerTx(txid string) *exptypes.TxInfo {
+func (pgb *ChainDB) GetExplorerTx(ctx context.Context, txid string) *exptypes.TxInfo {
 	txhash, err := chainhash.NewHashFromStr(txid)
 	if err != nil {
 		log.Errorf("Invalid transaction hash %s", txid)
 		return nil
 	}
 
-	txraw, ticketPrice, err := pgb.txWithTicketPrice(txhash)
+	txraw, ticketPrice, err := pgb.txWithTicketPrice(ctx, txhash)
 	if err != nil {
 		log.Errorf("txWithTicketPrice: %v", err)
 		return nil
