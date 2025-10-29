@@ -1,4 +1,4 @@
-// Copyright (c) 2018-2023, The Decred developers
+// Copyright (c) 2018-2025, The Decred developers
 // Copyright (c) 2017, The dcrdata developers
 // See LICENSE for details.
 
@@ -39,7 +39,6 @@ import (
 	"github.com/decred/dcrdata/v8/mempool"
 	"github.com/decred/dcrdata/v8/rpcutils"
 	"github.com/decred/dcrdata/v8/stakedb"
-	"github.com/decred/dcrdata/v8/trylock"
 	"github.com/decred/dcrdata/v8/txhelpers"
 )
 
@@ -259,7 +258,7 @@ type ChainDB struct {
 	devPrefetch        bool
 	InBatchSync        bool
 	InReorg            bool
-	tpUpdatePermission map[dbtypes.TimeBasedGrouping]*trylock.Mutex
+	tpUpdatePermission map[dbtypes.TimeBasedGrouping]*sync.Mutex
 	utxoCache          utxoStore
 	mixSetDiffsMtx     sync.Mutex
 	mixSetDiffs        map[uint32]int64 // height to value diff
@@ -682,9 +681,9 @@ func NewChainDB(ctx context.Context, cfg *ChainDBCfg, stakeDB *stakedb.StakeData
 	}
 
 	// For each chart grouping type create a non-blocking updater mutex.
-	tpUpdatePermissions := make(map[dbtypes.TimeBasedGrouping]*trylock.Mutex)
+	tpUpdatePermissions := make(map[dbtypes.TimeBasedGrouping]*sync.Mutex)
 	for g := range dbtypes.TimeBasedGroupings {
-		tpUpdatePermissions[g] = new(trylock.Mutex)
+		tpUpdatePermissions[g] = new(sync.Mutex)
 	}
 
 	// If a query timeout is not set (i.e. zero), default to 24 hrs for
